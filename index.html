@@ -249,7 +249,10 @@
                   </div>
 
                   <div class="setup-row toggles">
-                    <label class="toggle"><input type="checkbox" id="backingToggle" /> <span>Play the other notes for me</span></label>
+                    <label class="toggle music-toggle" id="musicToggleRow"
+                      ><input type="checkbox" id="musicToggle" /> <span>Play the original song along with me</span></label
+                    >
+                    <label class="toggle" id="backingToggleRow"><input type="checkbox" id="backingToggle" /> <span>Play the other notes for me</span></label>
                     <label class="select">
                       <span>Tile labels</span>
                       <select id="labelSelect">
@@ -306,6 +309,7 @@
         </div>
 
         <div class="play-controls">
+          <button id="musicButton" class="ctrl" type="button" aria-pressed="true" title="Song music on/off (M)" hidden>Music <kbd>M</kbd></button>
           <button id="sustainButton" class="ctrl" type="button" aria-pressed="false" title="Sustain (Tab)">Sustain <kbd>Tab</kbd></button>
           <div class="ctrl-group" title="Octave (Z / X)">
             <button id="octaveDown" class="ctrl" type="button" aria-label="Octave down">−</button>
@@ -349,14 +353,6 @@
             <span>MP3, WAV, M4A, OGG · up to 8 minutes · solo piano works best</span>
             <em id="audioFileName"></em>
           </label>
-          <label class="select">
-            <span>Detail</span>
-            <select id="detailSelect">
-              <option value="low">Simple – only the clearest notes</option>
-              <option value="medium" selected>Balanced</option>
-              <option value="high">Detailed – catch quiet notes too</option>
-            </select>
-          </label>
         </div>
 
         <div class="import-panel" data-import-panel="record" hidden>
@@ -386,6 +382,15 @@
           <p class="notice" id="youtubeNotice">YouTube import is coming soon. For now, upload an audio file you own, or record one.</p>
         </div>
 
+        <label class="select" id="detailRow">
+          <span>Detail</span>
+          <select id="detailSelect">
+            <option value="low">Simple – only the clearest notes</option>
+            <option value="medium" selected>Balanced</option>
+            <option value="high">Detailed – catch quiet notes too</option>
+          </select>
+        </label>
+
         <label class="field">
           <span>Song title</span>
           <input type="text" id="importTitleInput" maxlength="80" placeholder="My song" />
@@ -393,6 +398,7 @@
 
         <div class="convert-progress" id="convertProgress" hidden>
           <ol class="stages">
+            <li data-stage="fetch">Downloading</li>
             <li data-stage="decode">Reading audio</li>
             <li data-stage="model">Loading AI model</li>
             <li data-stage="listen">Listening for notes</li>
@@ -402,7 +408,10 @@
         </div>
         <p class="import-error" id="importError" role="alert" hidden></p>
 
-        <p class="fineprint">Everything is processed on your device; nothing is uploaded. Only use recordings you have the right to use.</p>
+        <p class="fineprint">
+          Audio files and recordings are processed on your device and never uploaded. YouTube links are fetched through our server. Only use music you have the
+          right to use.
+        </p>
         <div class="import-actions">
           <button class="btn ghost" type="button" id="importCancel">Cancel</button>
           <button class="btn primary" type="button" id="importConvert" disabled>Create lesson</button>

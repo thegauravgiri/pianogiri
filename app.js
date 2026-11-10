@@ -9,6 +9,8 @@ import { createAudioEngine } from "./js/audioEngine.js";
 import { createMidiInput } from "./js/midiInput.js";
 import { createProfile, ACHIEVEMENTS } from "./js/profile.js";
 import { renderAd } from "./js/ads.js";
+import { audioStore } from "./js/audioStore.js";
+import { createMusicPlayer } from "./js/musicPlayer.js";
 import { audioToNotes, midiFileToNotes, downloadSongAsMidi, youtubeToAudioBlob, isYoutubeUrl } from "./js/converter.js";
 
 const $ = (id) => document.getElementById(id);
@@ -22,6 +24,7 @@ const settings = {
   speed: 1,
   layout: "computer",
   backing: true,
+  music: true,
   labelMode: TOUCH_ONLY ? "notes" : "keys",
   freeLayout: "computer",
   ...storage.get(SETTINGS_KEY, {}),
@@ -32,6 +35,8 @@ const songService = createSongService({ manifestPath: SONG_MANIFEST_PATH });
 const audio = createAudioEngine();
 const profile = createProfile();
 const renderer = createRenderer($("noteCanvas"));
+const music = createMusicPlayer();
+let musicSongId = null;
 const keyboard = createKeyboardView({ keybed: $("keybed"), onPressStart: noteOn, onPressEnd: noteOff });
 const midiInput = createMidiInput({
   onNoteOn: (midi, velocity) => noteOn(midi, "midi", velocity),
@@ -156,6 +161,10 @@ function onKeyDown(event) {
     return;
   }
 
+  if (event.code === "KeyM" && app.view === "play") {
+    toggleMusic();
+    return;
+  }
   if (event.code === "Tab" && app.view === "play") {
     event.preventDefault();
     audio.toggleSustain();
@@ -265,6 +274,7 @@ function showLibrary() {
   stopRun();
   releaseEverything();
   app.song = null;
+  unloadMusic();
   setView("library");
   renderLibrary();
   renderProfile();
@@ -277,6 +287,7 @@ function showOverlay(id) {
 function openFreePlay() {
   stopRun();
   app.song = null;
+  unloadMusic();
   app.arrangement = null;
   app.phase = "free";
   app.windowBase = DEFAULT_WINDOW_BASE;
@@ -304,6 +315,48 @@ function openSong(songId) {
   app.song = song;
   setView("play");
   showSetup();
+  loadMusicFor(song);
+}
+
+/* ------------------------------------------------------------------ */
+/* Original song audio                                                  */
+/* ------------------------------------------------------------------ */
+
+async function loadMusicFor(song) {
+  if (musicSongId === song.id) return;
+  unloadMusic();
+  if (!song.hasAudio) return;
+  musicSongId = song.id;
+  const blob = await audioStore.get(song.id);
+  if (musicSongId !== song.id) return; // user moved on while loading
+  const ok = blob ? await music.load(blob, song.audioOffset) : false;
+  if (!ok && musicSongId === song.id) {
+    songService.markNoAudio(song.id);
+    musicSongId = null;
+  }
+  if (app.phase === "setup") syncSetupControls();
+  updateControls();
+}
+
+function unloadMusic() {
+  music.unload();
+  musicSongId = null;
+}
+
+function songHasMusic() {
+  return Boolean(app.song?.hasAudio && music.loaded && musicSongId === app.song.id);
+}
+
+function musicOn() {
+  return songHasMusic() && settings.music;
+}
+
+function toggleMusic() {
+  settings.music = !settings.music;
+  saveSettings();
+  if (app.phase === "setup") syncSetupControls();
+  updateControls();
+  if (songHasMusic()) toast(settings.music ? "Song music on" : "Song music muted", "The notes stay in sync either way.");
 }
 
 /* ------------------------------------------------------------------ */
@@ -348,6 +401,10 @@ function syncSetupControls() {
   $("speedInput").value = String(settings.speed);
   $("speedOut").textContent = `${Math.round(settings.speed * 100)}%`;
   $("backingToggle").checked = settings.backing;
+  $("musicToggleRow").hidden = !song.hasAudio;
+  $("musicToggle").checked = settings.music;
+  $("musicToggle").disabled = song.hasAudio && !songHasMusic();
+  $("backingToggleRow").hidden = song.hasAudio && settings.music;
   $("labelSelect").value = settings.labelMode;
 
   const arrangementPreview = arrange(song.notes, { difficulty: settings.difficulty, layout: settings.layout });
@@ -361,6 +418,7 @@ function syncSetupControls() {
     notes.push("Full piano works best with a touch screen or MIDI keyboard. Z / X move your computer keys.");
   }
   if (settings.mode === "watch") notes.push("Watch mode plays the song for you — no score.");
+  if (song.hasAudio && settings.music && settings.mode === "practice") notes.push("The music pauses while the song waits for you.");
   $("setupNote").textContent = notes.join(" ");
 }
 
@@ -377,7 +435,7 @@ function startRun() {
       if (complete) renderer.holdComplete(note.midi);
     },
     onAutoNote: (note) => {
-      audio.playNote(note.midi, note.d / settings.speed, note.v ?? 85);
+      if (!musicOn()) audio.playNote(note.midi, note.d / settings.speed, note.v ?? 85);
       keyboard.setPressed(note.midi, true);
       setTimeout(() => keyboard.setPressed(note.midi, Boolean(app.pressCount.get(note.midi))), Math.max(120, (note.d / settings.speed) * 1000));
       renderer.autoHit(note.midi);
@@ -389,7 +447,7 @@ function startRun() {
     arrangement: app.arrangement,
     mode: settings.mode,
     speed: settings.speed,
-    backingOn: settings.backing && settings.mode !== "watch",
+    backingOn: settings.backing && settings.mode !== "watch" && !musicOn(),
     callbacks,
   });
   $("hudMode").textContent = { practice: "Practice", perform: "Perform", watch: "Watch" }[settings.mode];
@@ -645,6 +703,8 @@ function updateControls() {
   $("midiButton").textContent = midiDevices.length ? `MIDI: ${midiDevices[0]}` : "Connect MIDI keyboard";
   $("midiButton").classList.toggle("connected", midiDevices.length > 0);
   $("midiButton").hidden = !midiInput.supported;
+  $("musicButton").hidden = !songHasMusic();
+  $("musicButton").setAttribute("aria-pressed", String(settings.music));
 }
 
 /* ------------------------------------------------------------------ */
@@ -764,6 +824,7 @@ function openImport() {
   $("convertProgress").hidden = true;
   $("youtubeInput").disabled = !IMPORT.youtubeEndpoint;
   $("youtubeNotice").hidden = Boolean(IMPORT.youtubeEndpoint);
+  document.querySelector('[data-import-tab="youtube"] .soon').hidden = Boolean(IMPORT.youtubeEndpoint);
   $("importDialog").showModal();
   updateImportButton();
 }
@@ -782,6 +843,7 @@ function setImportTab(tab) {
   document.querySelectorAll("[data-import-panel]").forEach((p) => {
     p.hidden = p.dataset.importPanel !== tab;
   });
+  $("detailRow").hidden = tab === "midi";
   updateImportButton();
 }
 
@@ -799,7 +861,7 @@ function titleFromFilename(name) {
 }
 
 function setStage(stage) {
-  const order = ["decode", "model", "listen", "notes"];
+  const order = ["fetch", "decode", "model", "listen", "notes"];
   const idx = order.indexOf(stage);
   document.querySelectorAll(".stages li").forEach((li) => {
     const i = order.indexOf(li.dataset.stage);
@@ -820,6 +882,8 @@ async function runImport() {
     let notes;
     let finalTitle = title;
     let origin = importState.tab;
+    let audioBlob = null;
+    let audioOffset = 0;
 
     if (importState.tab === "midi") {
       const result = await midiFileToNotes(importState.midiFile);
@@ -827,9 +891,16 @@ async function runImport() {
       finalTitle = finalTitle || result.title || titleFromFilename(importState.midiFile.name);
     } else {
       let blob = importState.tab === "audio" ? importState.file : importState.recordedBlob;
-      if (importState.tab === "youtube") blob = await youtubeToAudioBlob($("youtubeInput").value.trim());
       $("convertProgress").hidden = false;
       $("convertBar").style.width = "0%";
+      document.querySelector('.stages [data-stage="fetch"]').hidden = importState.tab !== "youtube";
+      if (importState.tab === "youtube") {
+        setStage("fetch");
+        const fetched = await youtubeToAudioBlob($("youtubeInput").value.trim());
+        blob = fetched.blob;
+        finalTitle = finalTitle || fetched.title;
+      }
+      audioBlob = blob;
       const result = await audioToNotes(blob, {
         detail: $("detailSelect").value,
         onStage: (stage) => setStage(stage),
@@ -838,11 +909,22 @@ async function runImport() {
         },
       });
       notes = result.notes;
+      audioOffset = result.shift;
       if (result.trimmed) toast("Trimmed to 8 minutes", "Longer audio is cut to keep your browser fast.");
       finalTitle = finalTitle || (importState.file ? titleFromFilename(importState.file.name) : "My recording");
     }
 
-    const song = songService.addUserSong({ id, title: finalTitle || "My song", artist: "My song", origin, notes });
+    let hasAudio = false;
+    if (audioBlob) {
+      try {
+        await audioStore.put(id, audioBlob);
+        hasAudio = true;
+      } catch (_error) {
+        toast("Couldn't save the song audio", "You can still play the lesson, just without the original music.");
+      }
+    }
+    const artist = origin === "youtube" ? "From YouTube" : origin === "record" ? "My recording" : "My song";
+    const song = songService.addUserSong({ id, title: finalTitle || "My song", artist, origin, notes, hasAudio, audioOffset });
     profile.recordConversion().forEach((a) => toast(`Badge unlocked: ${a.title}`, a.text));
     setStage("done");
     toast("Lesson ready!", `${song.notes.length} notes found in “${song.title}”.`);
@@ -1010,6 +1092,7 @@ function bindUi() {
       const song = songService.getById(id);
       if (song && window.confirm(`Delete “${song.title}” from My songs?`)) {
         songService.removeUserSong(id);
+        audioStore.remove(id);
         renderLibrary();
       }
       return;
@@ -1041,6 +1124,13 @@ function bindUi() {
     $("speedOut").textContent = `${Math.round(settings.speed * 100)}%`;
     saveSettings();
   });
+  $("musicToggle").addEventListener("change", (e) => {
+    settings.music = e.target.checked;
+    saveSettings();
+    syncSetupControls();
+    updateControls();
+  });
+  $("musicButton").addEventListener("click", toggleMusic);
   $("backingToggle").addEventListener("change", (e) => {
     settings.backing = e.target.checked;
     saveSettings();
@@ -1119,6 +1209,7 @@ function frame(now) {
   if (app.view === "play") {
     const game = app.game;
     if (game && app.phase === "playing") game.update(now);
+    music.sync(game ? game.songTime : 0, settings.speed, Boolean(game) && app.phase === "playing" && !game.waiting && musicOn());
     if (game) {
       updateHud();
       const upcoming = settings.mode === "watch" ? [] : game.nextNotes().filter((n) => n.t - game.songTime < 0.8);
@@ -1160,6 +1251,6 @@ async function startApp() {
   if (deepLink && songService.getById(deepLink)) openSong(deepLink);
 }
 
-if (new URLSearchParams(window.location.search).has("debug")) window.__pianogiri = { app, settings, noteOn, noteOff };
+if (new URLSearchParams(window.location.search).has("debug")) window.__pianogiri = { app, settings, noteOn, noteOff, music };
 
 startApp();

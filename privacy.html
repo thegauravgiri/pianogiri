@@ -49,10 +49,17 @@
         convert a song.
       </p>
 
+      <h2>YouTube links</h2>
+      <p>
+        If you import from YouTube, the link you paste is sent to our server (Google Cloud Run), which fetches that video's audio and sends it straight back to
+        your browser. We don't keep the audio or a list of links; our server logs only record the request and your IP address for abuse prevention, and are
+        deleted automatically.
+      </p>
+
       <h2>What we store</h2>
       <p>
         PianoGiri has no accounts. Your progress (XP, level, streak, best scores, badges), your settings and the songs you create are saved in your browser's
-        local storage. You can delete them at any time by clearing this site's data in your browser settings.
+        local storage, and the original audio of songs you import is kept in your browser's IndexedDB so it can play along with you. You can delete them at any time by clearing this site's data in your browser settings.
       </p>
 
       <h2>Advertising</h2>

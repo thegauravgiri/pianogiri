@@ -51,8 +51,9 @@ function cleanNotes(rawNotes, minAmplitude) {
   if (notes.length > MAX_NOTES) notes = notes.slice(0, MAX_NOTES);
 
   // Trim leading silence so the first note arrives about a second in.
+  // `shift` is kept so the original recording can be played back in sync.
   const shift = notes.length ? Math.max(0, notes[0].t - 1) : 0;
-  return notes.map((n) => ({ ...n, t: n.t - shift }));
+  return { notes: notes.map((n) => ({ ...n, t: n.t - shift })), shift };
 }
 
 // Converts an audio file/blob to notes with Basic Pitch in a Web Worker.
@@ -87,11 +88,11 @@ export async function audioToNotes(blob, { detail = "medium", onStage, onProgres
     });
   });
 
-  const cleaned = cleanNotes(notes, preset.minAmplitude);
+  const { notes: cleaned, shift } = cleanNotes(notes, preset.minAmplitude);
   if (cleaned.length === 0) {
     throw new Error("No notes were detected. Try a clearer recording or raise the detail level.");
   }
-  return { notes: cleaned, seconds, trimmed };
+  return { notes: cleaned, shift, seconds, trimmed };
 }
 
 async function loadMidiLibrary() {
@@ -115,7 +116,7 @@ export async function midiFileToNotes(blob) {
       notes.push({ t: n.time, d: n.duration, midi: n.midi, v: Math.round(n.velocity * 127) });
     }
   }
-  const cleaned = cleanNotes(notes, 0);
+  const { notes: cleaned } = cleanNotes(notes, 0);
   if (cleaned.length === 0) throw new Error("This MIDI file has no playable piano notes.");
   return { notes: cleaned, title: midi.name || "" };
 }
@@ -139,12 +140,22 @@ export async function downloadSongAsMidi(song) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-// Hook for a future server-side YouTube fetcher (disabled until configured).
+// Fetches audio through our YouTube service (youtube-service/ on Cloud Run).
+// Returns { blob, title }.
 export async function youtubeToAudioBlob(url) {
   if (!IMPORT.youtubeEndpoint) throw new Error("YouTube import isn't available yet.");
-  const response = await fetch(`${IMPORT.youtubeEndpoint}?url=${encodeURIComponent(url)}`);
-  if (!response.ok) throw new Error("Couldn't fetch audio for that link.");
-  return response.blob();
+  let response;
+  try {
+    response = await fetch(`${IMPORT.youtubeEndpoint}/audio?url=${encodeURIComponent(url)}`);
+  } catch (_error) {
+    throw new Error("Couldn't reach the YouTube service. Check your connection and try again.");
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || "Couldn't fetch audio for that link.");
+  }
+  const title = decodeURIComponent(response.headers.get("X-Title") || "");
+  return { blob: await response.blob(), title };
 }
 
 export function isYoutubeUrl(text) {

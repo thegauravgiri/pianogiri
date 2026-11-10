@@ -49,6 +49,8 @@ export function normalizeSong(raw, source) {
     source,
     createdAt: raw.createdAt || null,
     origin: raw.origin || null,
+    hasAudio: Boolean(raw.hasAudio),
+    audioOffset: Number(raw.audioOffset) || 0,
     notes,
     duration: last,
   };
@@ -69,6 +71,8 @@ function compact(song) {
     difficulty: song.difficulty,
     createdAt: song.createdAt,
     origin: song.origin,
+    hasAudio: song.hasAudio,
+    audioOffset: round3(song.audioOffset || 0),
     notes: song.notes.map((n) => [round3(n.t), round3(n.d), n.midi, Math.round(n.v ?? 80)]),
   };
 }
@@ -146,5 +150,13 @@ export function createSongService({ manifestPath }) {
     persistUserSongs();
   }
 
-  return { loadSongs, getAll, getById, addUserSong, removeUserSong };
+  function markNoAudio(id) {
+    const song = user.find((s) => s.id === id);
+    if (song) {
+      song.hasAudio = false;
+      persistUserSongs();
+    }
+  }
+
+  return { loadSongs, getAll, getById, addUserSong, removeUserSong, markNoAudio };
 }
