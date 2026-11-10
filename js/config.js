@@ -72,7 +72,4 @@ export const IMPORT = {
   basicPitchModel: "https://cdn.jsdelivr.net/npm/@spotify/basic-pitch@1.0.1/model/model.json",
   tfModule: "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.19.0/+esm",
   midiLibrary: "https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js",
-  // Set to a backend URL (for example a Cloud Run service) that accepts
-  // GET ?url=<youtube link> and responds with audio bytes. Empty = disabled.
-  youtubeEndpoint: "https://pianogiri-yt-tm2pg4owya-el.a.run.app",
 };

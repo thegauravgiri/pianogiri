@@ -1,4 +1,6 @@
-# PianoGiri YouTube audio service
+# PianoGiri YouTube audio service (parked)
+
+> **Not used by the app.** YouTube blocked about 3 in 4 requests from Cloud Run, so PianoGiri switched to recording the YouTube tab's audio in the browser. This is kept for reference.
 
 A small Cloud Run service. PianoGiri sends it a YouTube link, and it streams back the audio-only track (m4a when available). The browser then converts the audio to notes and keeps a copy so the original song can play along.
 

@@ -377,9 +377,23 @@
         <div class="import-panel" data-import-panel="youtube" hidden>
           <label class="field">
             <span>YouTube link</span>
-            <input type="url" id="youtubeInput" placeholder="https://www.youtube.com/watch?v=…" disabled />
+            <input type="url" id="youtubeInput" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
           </label>
-          <p class="notice" id="youtubeNotice">YouTube import is coming soon. For now, upload an audio file you own, or record one.</p>
+          <p class="notice" id="youtubeNotice" hidden></p>
+          <ol class="yt-steps" id="youtubeSteps">
+            <li>
+              <button class="btn ghost small" type="button" id="youtubeOpen" disabled>Open the video</button>
+              <span>It opens in a new tab. Let any ad finish, then pause it at the start.</span>
+            </li>
+            <li><strong>Share &amp; record</strong> below, pick the YouTube tab and keep <em>“Also share tab audio”</em> on.</li>
+            <li>Press play on the video. You can come back here; we stop by ourselves when the song ends.</li>
+          </ol>
+          <div class="tab-recorder" id="tabRecorder" hidden>
+            <span class="rec-dot" aria-hidden="true"></span>
+            <strong id="tabRecordTimer">0:00</strong>
+            <div class="level" aria-hidden="true"><div id="tabLevel"></div></div>
+            <span id="tabRecordStatus">Recording… press play on the video</span>
+          </div>
         </div>
 
         <label class="select" id="detailRow">
@@ -398,7 +412,7 @@
 
         <div class="convert-progress" id="convertProgress" hidden>
           <ol class="stages">
-            <li data-stage="fetch">Downloading</li>
+            <li data-stage="fetch">Recording</li>
             <li data-stage="decode">Reading audio</li>
             <li data-stage="model">Loading AI model</li>
             <li data-stage="listen">Listening for notes</li>
@@ -409,8 +423,7 @@
         <p class="import-error" id="importError" role="alert" hidden></p>
 
         <p class="fineprint">
-          Audio files and recordings are processed on your device and never uploaded. YouTube links are fetched through our server. Only use music you have the
-          right to use.
+          Everything is processed on your device and never uploaded, including audio recorded from a YouTube tab. Only use music you have the right to use.
         </p>
         <div class="import-actions">
           <button class="btn ghost" type="button" id="importCancel">Cancel</button>

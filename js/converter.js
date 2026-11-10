@@ -140,24 +140,6 @@ export async function downloadSongAsMidi(song) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-// Fetches audio through our YouTube service (youtube-service/ on Cloud Run).
-// Returns { blob, title }.
-export async function youtubeToAudioBlob(url) {
-  if (!IMPORT.youtubeEndpoint) throw new Error("YouTube import isn't available yet.");
-  let response;
-  try {
-    response = await fetch(`${IMPORT.youtubeEndpoint}/audio?url=${encodeURIComponent(url)}`);
-  } catch (_error) {
-    throw new Error("Couldn't reach the YouTube service. Check your connection and try again.");
-  }
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.message || "Couldn't fetch audio for that link.");
-  }
-  const title = decodeURIComponent(response.headers.get("X-Title") || "");
-  return { blob: await response.blob(), title };
-}
-
 export function isYoutubeUrl(text) {
   return /^(https?:\/\/)?(www\.|m\.|music\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]{6,}/i.test(text.trim());
 }

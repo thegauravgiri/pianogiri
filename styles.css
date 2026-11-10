@@ -1664,6 +1664,63 @@ select,
   font-size: 0.9rem;
 }
 
+.yt-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+  color: #cfe0ea;
+}
+
+.yt-steps li > .btn {
+  margin-right: 0.4rem;
+}
+
+.tab-recorder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem 1rem;
+  border-radius: 14px;
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.45);
+}
+
+.tab-recorder strong {
+  font-family: var(--font-mono);
+}
+
+.tab-recorder #tabRecordStatus {
+  flex-basis: 100%;
+  color: #cfe0ea;
+  font-size: 0.85rem;
+}
+
+.rec-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bad);
+  animation: pulseRing 1.2s ease infinite;
+}
+
+.tab-recorder .level {
+  flex: 1;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+#tabLevel {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent-bright), var(--gold), var(--bad));
+  transition: width 150ms linear;
+}
+
 .convert-progress .stages {
   list-style: none;
   margin: 0 0 0.6rem;

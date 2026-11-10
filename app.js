@@ -11,7 +11,8 @@ import { createProfile, ACHIEVEMENTS } from "./js/profile.js";
 import { renderAd } from "./js/ads.js";
 import { audioStore } from "./js/audioStore.js";
 import { createMusicPlayer } from "./js/musicPlayer.js";
-import { audioToNotes, midiFileToNotes, downloadSongAsMidi, youtubeToAudioBlob, isYoutubeUrl } from "./js/converter.js";
+import { audioToNotes, midiFileToNotes, downloadSongAsMidi, isYoutubeUrl } from "./js/converter.js";
+import { tabCaptureSupport, startTabCapture, youtubeTitle } from "./js/tabCapture.js";
 
 const $ = (id) => document.getElementById(id);
 const SETTINGS_KEY = "pianogiri.settings.v1";
@@ -816,21 +817,26 @@ function toast(title, text = "") {
 /* Import dialog                                                        */
 /* ------------------------------------------------------------------ */
 
-const importState = { tab: "audio", file: null, midiFile: null, recording: null, recordedBlob: null, busy: false };
+const importState = { tab: "audio", file: null, midiFile: null, recording: null, recordedBlob: null, busy: false, capture: null, youtubeBlob: null };
+const TAB_SUPPORT = tabCaptureSupport();
+const PAGE_TITLE = document.title;
 
 function openImport() {
   importState.busy = false;
   $("importError").hidden = true;
   $("convertProgress").hidden = true;
-  $("youtubeInput").disabled = !IMPORT.youtubeEndpoint;
-  $("youtubeNotice").hidden = Boolean(IMPORT.youtubeEndpoint);
-  document.querySelector('[data-import-tab="youtube"] .soon').hidden = Boolean(IMPORT.youtubeEndpoint);
+  document.querySelector('[data-import-tab="youtube"] .soon').hidden = true;
+  $("youtubeNotice").hidden = TAB_SUPPORT.ok;
+  $("youtubeNotice").textContent = TAB_SUPPORT.reason || "";
+  $("youtubeSteps").hidden = !TAB_SUPPORT.ok;
+  $("youtubeInput").disabled = !TAB_SUPPORT.ok;
   $("importDialog").showModal();
   updateImportButton();
 }
 
 function closeImport() {
   if (importState.recording) stopRecording();
+  if (importState.capture) cancelTabCapture();
   $("importDialog").close();
 }
 
@@ -852,8 +858,74 @@ function updateImportButton() {
     (importState.tab === "audio" && importState.file) ||
     (importState.tab === "midi" && importState.midiFile) ||
     (importState.tab === "record" && importState.recordedBlob && !importState.recording) ||
-    (importState.tab === "youtube" && IMPORT.youtubeEndpoint && isYoutubeUrl($("youtubeInput").value));
-  $("importConvert").disabled = !ready || importState.busy;
+    (importState.tab === "youtube" && TAB_SUPPORT.ok && isYoutubeUrl($("youtubeInput").value));
+  $("importConvert").disabled = !ready || (importState.busy && !importState.capture);
+  $("importConvert").textContent =
+    importState.tab !== "youtube" ? "Create lesson" : importState.capture ? "Stop & create lesson" : "Share & record";
+  $("youtubeOpen").disabled = !isYoutubeUrl($("youtubeInput").value) || Boolean(importState.capture);
+}
+
+/* YouTube via tab-audio capture ------------------------------------- */
+
+async function startYoutubeCapture() {
+  $("importError").hidden = true;
+  try {
+    importState.busy = true;
+    importState.capture = await startTabCapture({
+      onTick: (seconds) => {
+        $("tabRecordTimer").textContent = formatDuration(seconds);
+        document.title = `● ${formatDuration(seconds)} Recording – PianoGiri`;
+      },
+      onLevel: (level) => {
+        $("tabLevel").style.width = `${Math.round(level * 100)}%`;
+      },
+      onAutoStop: (reason) => {
+        const text = { ended: "The song ended — making your lesson…", limit: "Reached the 8-minute limit — making your lesson…", unshared: "Sharing stopped — making your lesson…" };
+        $("tabRecordStatus").textContent = text[reason] || "Making your lesson…";
+      },
+    });
+  } catch (error) {
+    importState.busy = false;
+    importState.capture = null;
+    $("importError").textContent = error.message;
+    $("importError").hidden = false;
+    updateImportButton();
+    return;
+  }
+
+  $("tabRecorder").hidden = false;
+  $("tabRecordStatus").textContent = "Recording… press play on the video. We'll stop when it ends.";
+  updateImportButton();
+
+  const capture = importState.capture;
+  try {
+    const blob = await capture.done;
+    if (capture.cancelled) return;
+    importState.youtubeBlob = blob;
+  } catch (error) {
+    if (!capture.cancelled) {
+      $("importError").textContent = error.message;
+      $("importError").hidden = false;
+    }
+  } finally {
+    importState.capture = null;
+    importState.busy = false;
+    $("tabRecorder").hidden = true;
+    document.title = PAGE_TITLE;
+    updateImportButton();
+  }
+  if (importState.youtubeBlob && !capture.cancelled) {
+    document.title = "✓ Lesson ready – PianoGiri";
+    setTimeout(() => (document.title = PAGE_TITLE), 6000);
+    runImport();
+  }
+}
+
+function cancelTabCapture() {
+  const capture = importState.capture;
+  if (!capture) return;
+  capture.cancelled = true;
+  capture.stop();
 }
 
 function titleFromFilename(name) {
@@ -884,6 +956,7 @@ async function runImport() {
     let origin = importState.tab;
     let audioBlob = null;
     let audioOffset = 0;
+    let youtubeArtist = "";
 
     if (importState.tab === "midi") {
       const result = await midiFileToNotes(importState.midiFile);
@@ -895,10 +968,10 @@ async function runImport() {
       $("convertBar").style.width = "0%";
       document.querySelector('.stages [data-stage="fetch"]').hidden = importState.tab !== "youtube";
       if (importState.tab === "youtube") {
-        setStage("fetch");
-        const fetched = await youtubeToAudioBlob($("youtubeInput").value.trim());
-        blob = fetched.blob;
-        finalTitle = finalTitle || fetched.title;
+        blob = importState.youtubeBlob;
+        const meta = await youtubeTitle($("youtubeInput").value.trim());
+        finalTitle = finalTitle || meta?.title || "YouTube song";
+        youtubeArtist = meta?.artist || "";
       }
       audioBlob = blob;
       const result = await audioToNotes(blob, {
@@ -923,7 +996,7 @@ async function runImport() {
         toast("Couldn't save the song audio", "You can still play the lesson, just without the original music.");
       }
     }
-    const artist = origin === "youtube" ? "From YouTube" : origin === "record" ? "My recording" : "My song";
+    const artist = origin === "youtube" ? youtubeArtist || "From YouTube" : origin === "record" ? "My recording" : "My song";
     const song = songService.addUserSong({ id, title: finalTitle || "My song", artist, origin, notes, hasAudio, audioOffset });
     profile.recordConversion().forEach((a) => toast(`Badge unlocked: ${a.title}`, a.text));
     setStage("done");
@@ -947,6 +1020,8 @@ function resetImportInputs() {
   importState.file = null;
   importState.midiFile = null;
   importState.recordedBlob = null;
+  importState.youtubeBlob = null;
+  $("youtubeInput").value = "";
   $("audioFile").value = "";
   $("midiFile").value = "";
   $("audioFileName").textContent = "";
@@ -1001,9 +1076,18 @@ function bindImport() {
   $("importOpen").addEventListener("click", openImport);
   $("importClose").addEventListener("click", closeImport);
   $("importCancel").addEventListener("click", closeImport);
-  $("importConvert").addEventListener("click", runImport);
+  $("importConvert").addEventListener("click", () => {
+    if (importState.tab !== "youtube") return runImport();
+    if (importState.capture) return importState.capture.stop();
+    return startYoutubeCapture();
+  });
+  $("youtubeOpen").addEventListener("click", () => {
+    const url = $("youtubeInput").value.trim();
+    if (isYoutubeUrl(url)) window.open(url.startsWith("http") ? url : `https://${url}`, "_blank", "noopener");
+  });
   $("importDialog").addEventListener("cancel", (e) => {
-    if (importState.busy) e.preventDefault();
+    if (importState.busy && !importState.capture) e.preventDefault();
+    else if (importState.capture) cancelTabCapture();
   });
   document.querySelectorAll("[data-import-tab]").forEach((b) => b.addEventListener("click", () => setImportTab(b.dataset.importTab)));
 

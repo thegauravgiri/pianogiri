@@ -17,7 +17,7 @@ A free, browser-based falling-notes piano game. Notes rain down onto the keys: t
 - **Speed** 50–150%, tile labels (computer keys / note names), 3-2-1 countdown, auto-pause when the tab loses focus.
 - **Game loop**: score, combo with ×2–×4 multiplier, live accuracy, stars, S–D grades, personal bests, XP and levels, daily streak, 5-minute daily goal, 10 badges, and "next challenge" suggestions.
 - **Inputs**: computer keyboard, mouse/multi-touch (with glissando), and USB/Bluetooth MIDI keyboards (Web MIDI; sustain pedal supported).
-- **Make a lesson**: upload audio (MP3/WAV/M4A/OGG, up to 8 min), record from the mic, or import a MIDI file. Audio is converted with [Basic Pitch](https://github.com/spotify/basic-pitch-ts), the model behind [NeuralNote](https://github.com/DamRsn/NeuralNote). It runs in a Web Worker on the user's device, so no server is needed and no audio is uploaded. Lessons can be downloaded as `.mid`.
+- **Make a lesson**: upload audio (MP3/WAV/M4A/OGG, up to 8 min), record from the mic, record a YouTube video's tab audio while it plays (desktop Chrome/Edge), or import a MIDI file. Audio is converted with [Basic Pitch](https://github.com/spotify/basic-pitch-ts), the model behind [NeuralNote](https://github.com/DamRsn/NeuralNote). It runs in a Web Worker on the user's device, so no server is needed and no audio is uploaded. Lessons can be downloaded as `.mid`.
 - **Free play** with a rising-notes visualiser, sustain, octave and velocity controls.
 
 ## Keyboard
@@ -69,13 +69,15 @@ Everything runs client-side, so the site stays on **GitHub Pages (free)**:
 | AI model + libs    | jsDelivr / cdnjs CDNs                | $0   |
 | Audio → MIDI       | User's browser (Web Worker, WebGL)   | $0   |
 
-### YouTube import (not enabled)
+### YouTube import
 
-The import dialog has a disabled YouTube tab wired to `IMPORT.youtubeEndpoint` in [js/config.js](js/config.js). If you add a backend, it needs to accept `GET ?url=<youtube link>` and return audio bytes; the browser then converts the audio as usual. Cloud Run scales to zero and fits inside the free tier for light use. Before enabling it, be aware that:
+YouTube lessons use **tab-audio capture**. The video opens in a new tab, the user shares that tab's audio (`getDisplayMedia`), and the browser records it while it plays, stopping by itself after about 5 seconds of silence. It then converts the recording like any other audio. There's no server, so nothing can be blocked and nothing costs money. It works in desktop Chrome and Edge only; other browsers are told to upload a file instead. The video title comes from YouTube's oEmbed endpoint.
 
-- downloading YouTube audio breaks YouTube's Terms of Service;
-- YouTube regularly blocks datacenter IPs (Cloud Run included);
-- transcribing copyrighted songs on an ad-supported site can put an AdSense account at risk.
+`youtube-service/` holds a parked Cloud Run downloader (yt-dlp) that was tried first. YouTube blocked about 3 in 4 of its requests from Cloud Run, so the app no longer uses it.
+
+### Play along
+
+Lessons made from audio (uploads, mic and YouTube recordings) keep the original audio in IndexedDB and play it in sync with the notes. It follows the speed setting without changing pitch, and pauses while Practice mode waits. Mute it in setup, with the Music button, or with `M`.
 
 ## Development
 
