@@ -2,15 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PianoGiri | Learn Songs By Playing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>PianoGiri | Learn Any Song on Piano – Falling Notes Game</title>
     <meta
       name="description"
-      content="PianoGiri is an interactive online piano tutor where you learn songs note-by-note with guided feedback, song search, and free play mode."
+      content="PianoGiri is a free online piano game: notes fall onto the keys, you hit them on time and hold the long ones. Learn songs, build combos, earn stars, and turn your own audio or MIDI into lessons."
     />
     <meta
       name="keywords"
-      content="PianoGiri, piano learning, online piano, piano notes, learn songs on piano, beginner piano trainer"
+      content="PianoGiri, piano game, learn piano online, falling notes piano, piano tiles, audio to MIDI, piano practice, beginner piano"
     />
     <meta name="author" content="Gaurav Giri" />
     <meta name="robots" content="index, follow, max-image-preview:large" />
@@ -20,20 +20,17 @@
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="PianoGiri" />
-    <meta property="og:title" content="PianoGiri | Learn Songs By Playing" />
+    <meta property="og:title" content="PianoGiri | Learn Any Song on Piano" />
     <meta
       property="og:description"
-      content="Learn basic piano songs interactively with real-time note guidance, progress tracking, and free play mode."
+      content="A free falling-notes piano game. Hit the notes, hold the long ones, chase 3 stars — or turn your own music into a lesson."
     />
     <meta property="og:url" content="https://piano.gauravgiri.com.np/" />
     <meta property="og:image" content="https://piano.gauravgiri.com.np/screenshot.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="PianoGiri | Learn Songs By Playing" />
-    <meta
-      name="twitter:description"
-      content="Practice piano songs online with guided notes and responsive feedback."
-    />
+    <meta name="twitter:title" content="PianoGiri | Learn Any Song on Piano" />
+    <meta name="twitter:description" content="Falling-notes piano game with combos, stars and audio-to-MIDI lessons." />
     <meta name="twitter:image" content="https://piano.gauravgiri.com.np/screenshot.png" />
 
     <script type="application/ld+json">
@@ -43,12 +40,11 @@
         "name": "PianoGiri",
         "url": "https://piano.gauravgiri.com.np/",
         "applicationCategory": "EducationalApplication",
+        "genre": "Music game",
         "operatingSystem": "Any",
-        "description": "Interactive piano learning web app with guided songs, search, and free play mode.",
-        "creator": {
-          "@type": "Person",
-          "name": "Gaurav Giri"
-        }
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "description": "Free falling-notes piano game with practice and perform modes, held notes, combos, stars, MIDI keyboard support and in-browser audio-to-MIDI conversion.",
+        "creator": { "@type": "Person", "name": "Gaurav Giri" }
       }
     </script>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
@@ -61,107 +57,366 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="app">
-      <section class="hero-card" aria-label="Interactive piano lesson">
-        <p class="eyebrow">Interactive Song Coach</p>
-        <h1 class="app-title">PianoGiri</h1>
-        <p class="hero-copy">
-          Pick a song, follow the highlighted notes, and train your fingers with real-time feedback.
-        </p>
+    <header class="topbar">
+      <a class="brand" href="./" id="brandLink">
+        <svg viewBox="0 0 32 32" aria-hidden="true" class="brand-mark">
+          <rect x="3" y="6" width="26" height="20" rx="5" fill="currentColor" opacity=".18" />
+          <rect x="7" y="10" width="4" height="12" rx="1.5" fill="currentColor" />
+          <rect x="14" y="6" width="4" height="10" rx="1.5" fill="#2fe0c5" />
+          <rect x="21" y="12" width="4" height="10" rx="1.5" fill="currentColor" />
+        </svg>
+        <span>PianoGiri</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <button class="nav-btn active" type="button" data-nav="library">Songs</button>
+        <button class="nav-btn" type="button" data-nav="free">Free Play</button>
+      </nav>
+      <div class="profile-chip" aria-label="Your progress">
+        <div class="chip streak" title="Day streak – practise every day to keep it alive">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2c1 4 5 5.5 5 11a5 5 0 0 1-10 0c0-2.4 1.2-3.9 2.3-5 .2 1.6.9 2.6 2 3 0-3.2-.6-6 .7-9z" />
+          </svg>
+          <strong id="streakCount">0</strong>
+          <span class="sr-only">day streak</span>
+        </div>
+        <div class="chip daily" title="Daily goal">
+          <svg viewBox="0 0 36 36" class="ring" aria-hidden="true">
+            <circle cx="18" cy="18" r="15" class="ring-bg" />
+            <circle cx="18" cy="18" r="15" class="ring-fill" id="dailyRing" />
+          </svg>
+          <span id="dailyLabel">0/5m</span>
+        </div>
+        <div class="chip level" title="Level">
+          <span class="level-badge" id="levelBadge">1</span>
+          <div class="xp-track" aria-hidden="true"><div class="xp-fill" id="xpFill"></div></div>
+        </div>
+      </div>
+    </header>
 
-        <div class="dashboard-grid">
-          <aside class="song-list-panel" aria-label="Available songs">
-            <h2>Available Songs</h2>
-            <div class="song-search" role="search" aria-label="Search songs">
-              <input id="songSearchInput" type="search" placeholder="Search song name" aria-label="Search by song name" />
-              <button id="songSearchButton" type="button">Search</button>
+    <main>
+      <!-- LIBRARY -->
+      <section id="libraryView" class="view library" aria-label="Song library">
+        <div class="library-hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Free piano game</p>
+            <h1>Learn any song, one falling note at a time.</h1>
+            <p class="lede">
+              Notes rain down onto the keys. Tap the short ones, hold the long ones, keep your combo alive and chase three stars. Use your computer keyboard,
+              touch screen or a real MIDI piano.
+            </p>
+            <div class="hero-actions">
+              <button id="importOpen" class="btn primary" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /></svg>
+                Turn your music into a lesson
+              </button>
+              <button class="btn ghost" type="button" data-nav="free">Free play</button>
             </div>
-            <div id="songList" class="song-list" role="listbox" aria-label="Song choices"></div>
-          </aside>
-
-          <section class="lesson-panel" aria-live="polite" aria-label="Current lesson">
-            <div class="lesson-header">
-              <div>
-                <p class="label">Current Song</p>
-                <h2 id="currentSongTitle">Select a song to begin</h2>
-              </div>
-              <div class="lesson-actions">
-                <button id="clearSong" class="ghost-btn" type="button">Free Play</button>
-                <button id="restartSong" class="ghost-btn" type="button">Restart</button>
-              </div>
-            </div>
-
-            <div class="coach-cards">
-              <article class="coach-card">
-                <p class="label">Next Note</p>
-                <p id="targetNote" class="target-note">-</p>
-              </article>
-
-              <article class="coach-card">
-                <p class="label">Hint</p>
-                <p id="hintText" class="hint-text">Choose a song to see guided notes.</p>
-              </article>
-
-              <article class="coach-card">
-                <p class="label">Progress</p>
-                <p id="progressText" class="progress-text">0 / 0</p>
-                <div class="progress-track" aria-hidden="true">
-                  <div id="progressFill" class="progress-fill"></div>
-                </div>
-              </article>
-            </div>
-
-            <p id="feedbackMessage" class="feedback neutral">Play the highlighted note to continue.</p>
-          </section>
+          </div>
+          <div class="hero-demo" aria-hidden="true">
+            <div class="demo-tile t1"></div>
+            <div class="demo-tile t2 long"></div>
+            <div class="demo-tile t3"></div>
+            <div class="demo-tile t4"></div>
+            <div class="demo-keys"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
         </div>
 
-        <section class="piano-panel" aria-label="Computer keyboard piano">
-          <div class="top-bar">
-            <button id="sustainButton" class="sustain" type="button" aria-pressed="false">
-              <span class="small">sustain</span>
-              <span class="big">tab</span>
-            </button>
+        <div class="stats-strip" aria-label="Your stats">
+          <div><strong id="statStars">0</strong><span>stars earned</span></div>
+          <div><strong id="statLevel">1</strong><span>level</span></div>
+          <div><strong id="statBadges">0</strong><span>badges</span></div>
+          <div><strong id="statStreak">0</strong><span>day streak</span></div>
+        </div>
 
-            <div class="keybed" id="keybed" role="group" aria-label="Piano keyboard"></div>
+        <div class="library-toolbar">
+          <div class="tabs" role="tablist" aria-label="Song collections">
+            <button class="tab active" role="tab" aria-selected="true" data-tab="all" type="button">All songs</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="builtin" type="button">Featured</button>
+            <button class="tab" role="tab" aria-selected="false" data-tab="user" type="button">My songs <span id="myCount" class="count">0</span></button>
           </div>
-
-          <div class="status-row">
-            <div class="status-item">Octave: <strong id="octaveLabel">C2</strong></div>
-            <div class="control-group" role="group" aria-label="Octave controls">
-              <button id="octaveDown" class="ctrl octave" type="button">
-                <span class="mark">-</span>
-                <span class="letter">Z</span>
-              </button>
-              <button id="octaveUp" class="ctrl octave" type="button">
-                <span class="mark">+</span>
-                <span class="letter">X</span>
-              </button>
-            </div>
-
-            <div class="status-item">Velocity: <strong id="velocityLabel">98</strong></div>
-            <div class="control-group" role="group" aria-label="Velocity controls">
-              <button id="velocityDown" class="ctrl velocity" type="button">
-                <span class="mark">-</span>
-                <span class="letter">C</span>
-              </button>
-              <button id="velocityUp" class="ctrl velocity" type="button">
-                <span class="mark">+</span>
-                <span class="letter">V</span>
-              </button>
-            </div>
+          <div class="search">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-4-4" />
+            </svg>
+            <input id="songSearch" type="search" placeholder="Search songs" aria-label="Search songs" />
           </div>
+        </div>
 
-          <p class="hint">Use A S D F G H J K L ; ' and W E T Y U O P. Match the next note shown above.</p>
+        <div id="songGrid" class="song-grid" aria-live="polite"></div>
+
+        <aside id="adLibrary" class="ad-slot ad-wide" hidden></aside>
+
+        <section class="badges" aria-labelledby="badgesTitle">
+          <h2 id="badgesTitle">Badges</h2>
+          <div id="badgeGrid" class="badge-grid"></div>
         </section>
 
-        <div class="note-legend" aria-label="Guide legend">
-          <span><i class="dot expected"></i> Expected note</span>
-          <span><i class="dot correct"></i> Correct hit</span>
-          <span><i class="dot wrong"></i> Wrong hit</span>
-          <span><i class="dot complete"></i> Song complete</span>
+        <section class="how" aria-labelledby="howTitle">
+          <h2 id="howTitle">How PianoGiri works</h2>
+          <ol>
+            <li>
+              <strong>Pick a song</strong> or upload audio / MIDI. Audio is turned into notes right in your browser by an AI model (Basic Pitch) — your file
+              never leaves your device.
+            </li>
+            <li>
+              <strong>Choose how to play.</strong> <em>Practice</em> waits for you at every note. <em>Perform</em> keeps the beat and judges your timing.
+              <em>Watch</em> plays it for you first.
+            </li>
+            <li><strong>Hit, hold, combo.</strong> Short tiles are taps, long tiles must be held until the end. Chain hits for a multiplier up to ×4.</li>
+          </ol>
+          <p class="keys-help">
+            Computer keys: white <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd><kbd>;</kbd
+            ><kbd>'</kbd> · black <kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd><kbd>O</kbd><kbd>P</kbd> · octave <kbd>Z</kbd>/<kbd>X</kbd> ·
+            sustain <kbd>Tab</kbd> · pause <kbd>Space</kbd>
+          </p>
+        </section>
+      </section>
+
+      <!-- PLAY -->
+      <section id="playView" class="view play" aria-label="Piano game" hidden>
+        <div class="hud">
+          <button id="backButton" class="icon-btn" type="button" aria-label="Back to songs">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <div class="hud-title">
+            <p class="label" id="hudMode">Free play</p>
+            <h2 id="hudSong">Free Play</h2>
+          </div>
+          <div class="hud-stats" id="hudStats">
+            <div class="stat"><span class="label">Score</span><strong id="hudScore">0</strong></div>
+            <div class="stat combo" id="comboStat">
+              <span class="label">Combo</span><strong id="hudCombo">0</strong><span id="hudMultiplier" class="multiplier">×1</span>
+            </div>
+            <div class="stat"><span class="label">Accuracy</span><strong id="hudAccuracy">100%</strong></div>
+          </div>
+          <button id="pauseButton" class="icon-btn" type="button" aria-label="Pause">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14" /></svg>
+          </button>
+        </div>
+        <div class="song-progress" aria-hidden="true"><div id="songProgress"></div></div>
+
+        <div class="arena" id="arena">
+          <div class="stage" id="stage">
+            <canvas id="noteCanvas" aria-hidden="true"></canvas>
+          </div>
+
+          <div class="keybed" id="keybed" role="group" aria-label="Piano keyboard"></div>
+
+          <div class="overlay" id="setupOverlay" hidden>
+            <div class="panel setup">
+              <div class="setup-head">
+                <div>
+                  <p class="label" id="setupArtist"></p>
+                  <h3 id="setupTitle">Song</h3>
+                  <p class="setup-meta" id="setupMeta"></p>
+                </div>
+                <button id="startButton" class="btn primary big" type="button">Start <kbd>Space</kbd></button>
+              </div>
+              <div class="setup-cols">
+                <div class="setup-col">
+                  <fieldset class="seg-group">
+                    <legend>Mode</legend>
+                    <div class="seg" data-setting="mode">
+                      <button type="button" data-value="practice"><strong>Practice</strong><small>Waits for you</small></button>
+                      <button type="button" data-value="perform"><strong>Perform</strong><small>Keep the beat</small></button>
+                      <button type="button" data-value="watch"><strong>Watch</strong><small>Hear it first</small></button>
+                    </div>
+                  </fieldset>
+
+                  <fieldset class="seg-group">
+                    <legend>Difficulty</legend>
+                    <div class="seg" data-setting="difficulty">
+                      <button type="button" data-value="easy"><strong>Easy</strong><small>Melody only</small></button>
+                      <button type="button" data-value="medium"><strong>Medium</strong><small>+ Bass notes</small></button>
+                      <button type="button" data-value="hard"><strong>Hard</strong><small>Every note</small></button>
+                    </div>
+                  </fieldset>
+                </div>
+                <div class="setup-col">
+                  <div class="setup-row">
+                    <label class="slider">
+                      <span>Speed <output id="speedOut">100%</output></span>
+                      <input id="speedInput" type="range" min="0.5" max="1.5" step="0.05" value="1" />
+                    </label>
+                    <fieldset class="seg-group compact">
+                      <legend>Keyboard</legend>
+                      <div class="seg" data-setting="layout">
+                        <button type="button" data-value="computer">Computer keys</button>
+                        <button type="button" data-value="full">Full piano</button>
+                      </div>
+                    </fieldset>
+                  </div>
+
+                  <div class="setup-row toggles">
+                    <label class="toggle"><input type="checkbox" id="backingToggle" /> <span>Play the other notes for me</span></label>
+                    <label class="select">
+                      <span>Tile labels</span>
+                      <select id="labelSelect">
+                        <option value="keys">Computer keys</option>
+                        <option value="notes">Note names</option>
+                        <option value="off">None</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <p class="setup-note" id="setupNote"></p>
+            </div>
+          </div>
+
+          <div class="overlay countdown" id="countdownOverlay" hidden><span id="countdownNumber">3</span></div>
+
+          <div class="overlay" id="pauseOverlay" hidden>
+            <div class="panel small">
+              <h3>Paused</h3>
+              <button id="resumeButton" class="btn primary" type="button">Resume <kbd>Space</kbd></button>
+              <button id="restartButton" class="btn ghost" type="button">Restart</button>
+              <button id="settingsButton" class="btn ghost" type="button">Change settings</button>
+              <button id="quitButton" class="btn ghost" type="button">Back to songs</button>
+            </div>
+          </div>
+
+          <div class="overlay" id="resultsOverlay" hidden>
+            <div class="panel results">
+              <div class="ribbon" id="newBest" hidden>New best!</div>
+              <div class="result-stars" id="resultStars" aria-label="Stars">
+                <svg viewBox="0 0 24 24"><path d="m12 2 3 6.6 7 .8-5.2 4.8 1.5 7L12 17.7 5.7 21.2l1.5-7L2 9.4l7-.8z" /></svg>
+                <svg viewBox="0 0 24 24"><path d="m12 2 3 6.6 7 .8-5.2 4.8 1.5 7L12 17.7 5.7 21.2l1.5-7L2 9.4l7-.8z" /></svg>
+                <svg viewBox="0 0 24 24"><path d="m12 2 3 6.6 7 .8-5.2 4.8 1.5 7L12 17.7 5.7 21.2l1.5-7L2 9.4l7-.8z" /></svg>
+              </div>
+              <p class="result-headline" id="resultHeadline">Nice!</p>
+              <div class="result-score"><span class="grade" id="resultGrade">A</span><strong id="resultScore">0</strong></div>
+              <div class="result-grid" id="resultGrid"></div>
+              <div class="xp-gain">
+                <span id="resultXp">+0 XP</span>
+                <div class="xp-track"><div class="xp-fill" id="resultXpFill"></div></div>
+                <span id="resultLevel">Level 1</span>
+              </div>
+              <div class="result-badges" id="resultBadges"></div>
+              <p class="result-tip" id="resultTip"></p>
+              <div class="result-actions">
+                <button id="retryButton" class="btn primary" type="button">Play again <kbd>Enter</kbd></button>
+                <button id="nextButton" class="btn ghost" type="button">Next challenge</button>
+                <button id="resultsBackButton" class="btn ghost" type="button">Songs</button>
+              </div>
+              <aside id="adResults" class="ad-slot" hidden></aside>
+            </div>
+          </div>
+        </div>
+
+        <div class="play-controls">
+          <button id="sustainButton" class="ctrl" type="button" aria-pressed="false" title="Sustain (Tab)">Sustain <kbd>Tab</kbd></button>
+          <div class="ctrl-group" title="Octave (Z / X)">
+            <button id="octaveDown" class="ctrl" type="button" aria-label="Octave down">−</button>
+            <span>Keys <strong id="octaveLabel">C4</strong></span>
+            <button id="octaveUp" class="ctrl" type="button" aria-label="Octave up">+</button>
+          </div>
+          <div class="ctrl-group" title="Velocity (C / V)">
+            <button id="velocityDown" class="ctrl" type="button" aria-label="Softer">−</button>
+            <span>Vel <strong id="velocityLabel">98</strong></span>
+            <button id="velocityUp" class="ctrl" type="button" aria-label="Louder">+</button>
+          </div>
+          <button id="freeLayoutButton" class="ctrl" type="button">Full piano</button>
+          <button id="midiButton" class="ctrl" type="button">Connect MIDI keyboard</button>
         </div>
       </section>
     </main>
+
+    <dialog id="importDialog" class="import-dialog" aria-labelledby="importTitle">
+      <div class="import-card">
+        <header>
+          <div>
+            <p class="eyebrow">New lesson</p>
+            <h2 id="importTitle">Turn music into a lesson</h2>
+          </div>
+          <button class="icon-btn" type="button" id="importClose" aria-label="Close">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          </button>
+        </header>
+
+        <div class="tabs import-tabs" role="tablist">
+          <button class="tab active" role="tab" type="button" data-import-tab="audio" aria-selected="true">Audio file</button>
+          <button class="tab" role="tab" type="button" data-import-tab="record" aria-selected="false">Record</button>
+          <button class="tab" role="tab" type="button" data-import-tab="midi" aria-selected="false">MIDI file</button>
+          <button class="tab" role="tab" type="button" data-import-tab="youtube" aria-selected="false">YouTube <span class="soon">soon</span></button>
+        </div>
+
+        <div class="import-panel" data-import-panel="audio">
+          <label class="dropzone" id="audioDrop">
+            <input type="file" id="audioFile" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.webm" />
+            <strong>Drop an audio file or click to choose</strong>
+            <span>MP3, WAV, M4A, OGG · up to 8 minutes · solo piano works best</span>
+            <em id="audioFileName"></em>
+          </label>
+          <label class="select">
+            <span>Detail</span>
+            <select id="detailSelect">
+              <option value="low">Simple – only the clearest notes</option>
+              <option value="medium" selected>Balanced</option>
+              <option value="high">Detailed – catch quiet notes too</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="import-panel" data-import-panel="record" hidden>
+          <div class="recorder">
+            <button id="recordButton" class="record-btn" type="button" aria-pressed="false"><span></span></button>
+            <div>
+              <strong id="recordStatus">Hum, sing or play near your mic</strong>
+              <span id="recordTimer">0:00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="import-panel" data-import-panel="midi" hidden>
+          <label class="dropzone">
+            <input type="file" id="midiFile" accept=".mid,.midi,audio/midi,audio/x-midi" />
+            <strong>Drop a MIDI file or click to choose</strong>
+            <span>Drum tracks are skipped automatically</span>
+            <em id="midiFileName"></em>
+          </label>
+        </div>
+
+        <div class="import-panel" data-import-panel="youtube" hidden>
+          <label class="field">
+            <span>YouTube link</span>
+            <input type="url" id="youtubeInput" placeholder="https://www.youtube.com/watch?v=…" disabled />
+          </label>
+          <p class="notice" id="youtubeNotice">YouTube import is coming soon. For now, upload an audio file you own, or record one.</p>
+        </div>
+
+        <label class="field">
+          <span>Song title</span>
+          <input type="text" id="importTitleInput" maxlength="80" placeholder="My song" />
+        </label>
+
+        <div class="convert-progress" id="convertProgress" hidden>
+          <ol class="stages">
+            <li data-stage="decode">Reading audio</li>
+            <li data-stage="model">Loading AI model</li>
+            <li data-stage="listen">Listening for notes</li>
+            <li data-stage="notes">Building your lesson</li>
+          </ol>
+          <div class="bar"><div id="convertBar"></div></div>
+        </div>
+        <p class="import-error" id="importError" role="alert" hidden></p>
+
+        <p class="fineprint">Everything is processed on your device; nothing is uploaded. Only use recordings you have the right to use.</p>
+        <div class="import-actions">
+          <button class="btn ghost" type="button" id="importCancel">Cancel</button>
+          <button class="btn primary" type="button" id="importConvert" disabled>Create lesson</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+
+    <footer class="site-footer">
+      <span>© PianoGiri</span>
+      <a href="./privacy.html">Privacy</a>
+      <a href="https://github.com/gaurovgiri/pianogiri" rel="noopener">GitHub</a>
+    </footer>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script type="module" src="./app.js"></script>

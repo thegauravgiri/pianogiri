@@ -1,50 +1,72 @@
-import { DISPLAY_TO_SOUND_OCTAVE_OFFSET, MIN_MIDI, MAX_MIDI } from "./config.js";
+import { MIN_MIDI, MAX_MIDI } from "./config.js";
 import { clamp } from "./utils.js";
 
-export function createAudioEngine({ keyConfigByCode, onKeyVisualChange }) {
-  const ACTIVE_KEYS = new Set();
-  const voicesByCode = new Map();
-  const sustainedCodes = new Set();
+const SAMPLE_URLS = {
+  A0: "A0.mp3",
+  C1: "C1.mp3",
+  "D#1": "Ds1.mp3",
+  "F#1": "Fs1.mp3",
+  A1: "A1.mp3",
+  C2: "C2.mp3",
+  "D#2": "Ds2.mp3",
+  "F#2": "Fs2.mp3",
+  A2: "A2.mp3",
+  C3: "C3.mp3",
+  "D#3": "Ds3.mp3",
+  "F#3": "Fs3.mp3",
+  A3: "A3.mp3",
+  C4: "C4.mp3",
+  "D#4": "Ds4.mp3",
+  "F#4": "Fs4.mp3",
+  A4: "A4.mp3",
+  C5: "C5.mp3",
+  "D#5": "Ds5.mp3",
+  "F#5": "Fs5.mp3",
+  A5: "A5.mp3",
+  C6: "C6.mp3",
+  "D#6": "Ds6.mp3",
+  "F#6": "Fs6.mp3",
+  A6: "A6.mp3",
+  C7: "C7.mp3",
+  "D#7": "Ds7.mp3",
+  "F#7": "Fs7.mp3",
+  A7: "A7.mp3",
+  C8: "C8.mp3",
+};
 
-  let initialized = false;
-  let toneReady = false;
+// MIDI-number based piano. Live (player) voices and automatic (backing /
+// demo) voices are tracked separately so they never cut each other off.
+export function createAudioEngine() {
+  const liveVoices = new Map(); // midi -> note name currently held by the player
+  const sustainedMidis = new Set();
+
   let loadPromise = null;
-  let pianoSampler = null;
-
-  let baseOctave = 2;
+  let ready = false;
+  let sampler = null;
   let velocity = 98;
   let sustainOn = false;
 
-  function midiToNoteName(midi) {
-    return Tone.Frequency(midi, "midi").toNote();
+  function hasTone() {
+    return typeof Tone !== "undefined";
   }
 
-  function velocityToGain(velocityValue) {
-    return clamp(Math.pow(velocityValue / 127, 1.5), 0.08, 1);
+  function noteName(midi) {
+    return Tone.Frequency(clamp(midi, MIN_MIDI, MAX_MIDI), "midi").toNote();
   }
 
-  function getMidiForKey(config) {
-    const displayedRootC = (baseOctave + 1) * 12;
-    const calibratedRootC = displayedRootC + DISPLAY_TO_SOUND_OCTAVE_OFFSET * 12;
-    return clamp(calibratedRootC + config.semitone, MIN_MIDI, MAX_MIDI);
+  function gainFor(velocityValue) {
+    return clamp(Math.pow(velocityValue / 127, 1.5), 0.05, 1);
   }
 
-  function getConfigByCode(code) {
-    return keyConfigByCode.get(code);
-  }
-
-  function initAudio() {
-    if (initialized) {
+  function init() {
+    if (loadPromise) {
       return loadPromise;
     }
 
-    if (typeof Tone === "undefined") {
-      initialized = true;
+    if (!hasTone()) {
       loadPromise = Promise.resolve();
       return loadPromise;
     }
-
-    initialized = true;
 
     loadPromise = new Promise((resolve) => {
       Tone.Destination.volume.value = -3;
@@ -60,178 +82,110 @@ export function createAudioEngine({ keyConfigByCode, onKeyVisualChange }) {
       compressor.connect(reverb);
       reverb.connect(limiter);
 
-      pianoSampler = new Tone.Sampler({
-        urls: {
-          A0: "A0.mp3",
-          C1: "C1.mp3",
-          "D#1": "Ds1.mp3",
-          "F#1": "Fs1.mp3",
-          A1: "A1.mp3",
-          C2: "C2.mp3",
-          "D#2": "Ds2.mp3",
-          "F#2": "Fs2.mp3",
-          A2: "A2.mp3",
-          C3: "C3.mp3",
-          "D#3": "Ds3.mp3",
-          "F#3": "Fs3.mp3",
-          A3: "A3.mp3",
-          C4: "C4.mp3",
-          "D#4": "Ds4.mp3",
-          "F#4": "Fs4.mp3",
-          A4: "A4.mp3",
-          C5: "C5.mp3",
-          "D#5": "Ds5.mp3",
-          "F#5": "Fs5.mp3",
-          A5: "A5.mp3",
-          C6: "C6.mp3",
-          "D#6": "Ds6.mp3",
-          "F#6": "Fs6.mp3",
-          A6: "A6.mp3",
-          C7: "C7.mp3",
-          "D#7": "Ds7.mp3",
-          "F#7": "Fs7.mp3",
-          A7: "A7.mp3",
-          C8: "C8.mp3",
-        },
+      sampler = new Tone.Sampler({
+        urls: SAMPLE_URLS,
         release: 1.4,
         baseUrl: "https://tonejs.github.io/audio/salamander/",
         onload: () => {
-          toneReady = true;
+          ready = true;
           resolve();
         },
-        onerror: () => {
-          resolve();
-        },
+        onerror: () => resolve(),
       }).connect(eq);
     });
 
     return loadPromise;
   }
 
-  async function resumeAudioIfNeeded() {
-    if (typeof Tone === "undefined") {
+  async function resume() {
+    if (!hasTone()) {
       return;
     }
 
-    await initAudio();
     if (Tone.context.state !== "running") {
       await Tone.start();
     }
+    await init();
   }
 
-  function releaseVoice(noteName) {
-    if (!noteName || !pianoSampler) {
+  function isReady() {
+    return ready;
+  }
+
+  function noteOn(midi, velocityOverride) {
+    if (!ready || !sampler || liveVoices.has(midi)) {
       return;
     }
 
-    pianoSampler.triggerRelease(noteName);
+    sustainedMidis.delete(midi);
+    const name = noteName(midi);
+    sampler.triggerAttack(name, undefined, gainFor(velocityOverride ?? velocity));
+    liveVoices.set(midi, name);
   }
 
-  function noteOn(code) {
-    const config = getConfigByCode(code);
-    if (!config || ACTIVE_KEYS.has(code) || !toneReady || !pianoSampler) {
+  function noteOff(midi) {
+    const name = liveVoices.get(midi);
+    if (!name) {
       return;
     }
-
-    ACTIVE_KEYS.add(code);
-    sustainedCodes.delete(code);
-    onKeyVisualChange(code, true);
-
-    const midi = getMidiForKey(config);
-    const noteName = midiToNoteName(midi);
-    const existingNote = voicesByCode.get(code);
-
-    if (existingNote) {
-      pianoSampler.triggerRelease(existingNote);
-    }
-
-    pianoSampler.triggerAttack(noteName, undefined, velocityToGain(velocity));
-    voicesByCode.set(code, noteName);
-  }
-
-  function noteOff(code) {
-    if (!ACTIVE_KEYS.has(code)) {
-      return;
-    }
-
-    ACTIVE_KEYS.delete(code);
-    onKeyVisualChange(code, false);
 
     if (sustainOn) {
-      sustainedCodes.add(code);
+      sustainedMidis.add(midi);
       return;
     }
 
-    const noteName = voicesByCode.get(code);
-    if (noteName) {
-      releaseVoice(noteName);
-      voicesByCode.delete(code);
-    }
+    sampler.triggerRelease(name);
+    liveVoices.delete(midi);
   }
 
-  function releaseSustainedVoices() {
-    for (const code of sustainedCodes) {
-      const noteName = voicesByCode.get(code);
-      if (noteName) {
-        releaseVoice(noteName);
-        voicesByCode.delete(code);
+  // Fire-and-forget note for backing tracks and demo playback.
+  function playNote(midi, durationSeconds, velocityValue = 80) {
+    if (!ready || !sampler) {
+      return;
+    }
+
+    sampler.triggerAttackRelease(noteName(midi), Math.max(0.08, durationSeconds), undefined, gainFor(velocityValue));
+  }
+
+  function releaseSustained() {
+    for (const midi of sustainedMidis) {
+      const name = liveVoices.get(midi);
+      if (name && sampler) {
+        sampler.triggerRelease(name);
       }
+      liveVoices.delete(midi);
     }
-    sustainedCodes.clear();
+    sustainedMidis.clear();
   }
 
-  function panicAllNotes() {
-    if (pianoSampler) {
-      pianoSampler.releaseAll();
+  function panic() {
+    if (sampler) {
+      sampler.releaseAll();
     }
-
-    for (const [code] of voicesByCode) {
-      voicesByCode.delete(code);
-      onKeyVisualChange(code, false);
-    }
-
-    ACTIVE_KEYS.clear();
-    sustainedCodes.clear();
+    liveVoices.clear();
+    sustainedMidis.clear();
   }
 
-  function changeOctave(delta) {
-    baseOctave = clamp(baseOctave + delta, 1, 6);
-  }
-
-  function changeVelocity(delta) {
-    velocity = clamp(velocity + delta, 20, 127);
-  }
-
-  function toggleSustain() {
-    sustainOn = !sustainOn;
+  function setSustain(on) {
+    sustainOn = on;
     if (!sustainOn) {
-      releaseSustainedVoices();
+      releaseSustained();
     }
-  }
-
-  function getBaseOctave() {
-    return baseOctave;
-  }
-
-  function getVelocity() {
-    return velocity;
-  }
-
-  function isSustainOn() {
-    return sustainOn;
   }
 
   return {
-    initAudio,
-    resumeAudioIfNeeded,
+    init,
+    resume,
+    isReady,
     noteOn,
     noteOff,
-    panicAllNotes,
-    changeOctave,
-    changeVelocity,
-    toggleSustain,
-    getBaseOctave,
-    getVelocity,
-    isSustainOn,
+    playNote,
+    panic,
+    toggleSustain: () => setSustain(!sustainOn),
+    isSustainOn: () => sustainOn,
+    changeVelocity: (delta) => {
+      velocity = clamp(velocity + delta, 20, 127);
+    },
+    getVelocity: () => velocity,
   };
 }
