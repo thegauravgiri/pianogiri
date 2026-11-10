@@ -8,27 +8,8 @@ const MIN_GAP_EASY = 0.14; // easy mode drops melody notes faster than this
 //   layout:     "computer" (fold into the 18-key window) | "full" (original pitches)
 // Returns { play, backing, rangeLo, rangeHi, windowBase }.
 export function arrange(notes, { difficulty, layout }) {
-  const clusters = clusterNotes(notes);
-  let play = [];
-
-  if (difficulty === "easy") {
-    let lastT = -Infinity;
-    for (const cluster of clusters) {
-      const top = cluster.reduce((a, b) => (b.midi > a.midi ? b : a));
-      if (top.t - lastT < MIN_GAP_EASY) continue;
-      play.push(top);
-      lastT = top.t;
-    }
-  } else if (difficulty === "medium") {
-    for (const cluster of clusters) {
-      const sorted = [...cluster].sort((a, b) => b.midi - a.midi);
-      play.push(sorted[0]);
-      const low = sorted[sorted.length - 1];
-      if (sorted.length > 1 && sorted[0].midi - low.midi >= 5) play.push(low);
-    }
-  } else {
-    play = [...notes];
-  }
+  const hasMelody = notes.some((n) => n.m);
+  let play = hasMelody ? pickFromMelody(notes, difficulty) : pickTopLine(notes, difficulty);
 
   const playSet = new Set(play);
   const backing = notes.filter((n) => !playSet.has(n));
@@ -65,6 +46,64 @@ export function arrange(notes, { difficulty, layout }) {
   });
 
   return { play, backing, rangeLo, rangeHi, windowBase };
+}
+
+// Songs with a tracked melody (audio and MIDI imports):
+//   easy   = the melody
+//   medium = melody + a bass line (lowest accompaniment notes, well below the tune)
+//   hard   = melody + the whole accompaniment
+function pickFromMelody(notes, difficulty) {
+  const melody = notes.filter((n) => n.m);
+  const accompaniment = notes.filter((n) => !n.m);
+  if (difficulty === "easy") return melody;
+  if (difficulty === "hard") return [...melody, ...accompaniment.filter((n) => n.d >= 0.1)];
+
+  const bass = [];
+  let lastT = -Infinity;
+  for (const cluster of clusterNotes(accompaniment)) {
+    const low = cluster.reduce((a, b) => (b.midi < a.midi ? b : a));
+    const tune = melodyAt(melody, low.t);
+    const ceiling = tune ? tune.midi - 7 : 57;
+    if (low.midi > ceiling || low.d < 0.15 || low.t - lastT < 0.3) continue;
+    bass.push(low);
+    lastT = low.t;
+  }
+  return [...melody, ...bass];
+}
+
+function melodyAt(melody, t) {
+  let best = null;
+  for (const n of melody) {
+    if (n.t > t + 0.5) break;
+    if (n.t + n.d >= t - 0.5) best = n;
+  }
+  return best;
+}
+
+// Songs without a tracked melody (built-in and older songs): top line.
+function pickTopLine(notes, difficulty) {
+  const clusters = clusterNotes(notes);
+  const play = [];
+  if (difficulty === "easy") {
+    let lastT = -Infinity;
+    for (const cluster of clusters) {
+      const top = cluster.reduce((a, b) => (b.midi > a.midi ? b : a));
+      if (top.t - lastT < MIN_GAP_EASY) continue;
+      play.push(top);
+      lastT = top.t;
+    }
+    return play;
+  }
+  if (difficulty === "medium") {
+    for (const cluster of clusters) {
+      const sorted = [...cluster].sort((a, b) => b.midi - a.midi);
+      play.push(sorted[0]);
+      const low = sorted[sorted.length - 1];
+      if (sorted.length > 1 && sorted[0].midi - low.midi >= 5) play.push(low);
+    }
+    return play;
+  }
+  return [...notes];
 }
 
 function clusterNotes(notes) {

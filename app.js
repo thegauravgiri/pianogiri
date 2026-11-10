@@ -339,6 +339,40 @@ async function loadMusicFor(song) {
   updateControls();
 }
 
+// Re-runs note finding on a lesson's stored audio (lessons made before melody tracking).
+async function reanalyzeSong() {
+  const song = app.song;
+  if (!song?.hasAudio) return;
+  const button = $("reanalyzeButton");
+  button.disabled = true;
+  try {
+    const blob = await audioStore.get(song.id);
+    if (!blob) throw new Error("The original audio for this lesson is gone.");
+    const result = await audioToNotes(blob, {
+      detail: "medium",
+      onStage: (stage) => {
+        button.textContent = { decode: "Reading audio…", model: "Loading AI model…", notes: "Building notes…" }[stage] || button.textContent;
+      },
+      onProgress: (p) => {
+        button.textContent = `Listening… ${Math.round(p * 100)}%`;
+      },
+    });
+    const updated = songService.replaceUserSongNotes(song.id, { notes: result.notes, audioOffset: result.shift, analysis: 2 });
+    if (app.song?.id !== song.id) return;
+    app.song = updated;
+    unloadMusic();
+    loadMusicFor(updated);
+    showSetup();
+    renderLibrary();
+    toast("Melody found", `${updated.notes.filter((n) => n.m).length} melody notes in “${updated.title}”. Easy mode now plays the tune.`);
+  } catch (error) {
+    toast("Couldn't redo this lesson", error.message);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Find the melody again";
+  }
+}
+
 function unloadMusic() {
   music.unload();
   musicSongId = null;
@@ -403,6 +437,7 @@ function syncSetupControls() {
   $("speedOut").textContent = `${Math.round(settings.speed * 100)}%`;
   $("backingToggle").checked = settings.backing;
   $("musicToggleRow").hidden = !song.hasAudio;
+  $("reanalyzeRow").hidden = !(song.source === "user" && song.hasAudio && song.analysis < 2);
   $("musicToggle").checked = settings.music;
   $("musicToggle").disabled = song.hasAudio && !songHasMusic();
   $("backingToggleRow").hidden = song.hasAudio && settings.music;
@@ -997,7 +1032,8 @@ async function runImport() {
       }
     }
     const artist = origin === "youtube" ? youtubeArtist || "From YouTube" : origin === "record" ? "My recording" : "My song";
-    const song = songService.addUserSong({ id, title: finalTitle || "My song", artist, origin, notes, hasAudio, audioOffset });
+    const analysis = origin === "midi" ? 1 : 2; // 2 = tracked melody (see js/melody.js)
+    const song = songService.addUserSong({ id, title: finalTitle || "My song", artist, origin, notes, hasAudio, audioOffset, analysis });
     profile.recordConversion().forEach((a) => toast(`Badge unlocked: ${a.title}`, a.text));
     setStage("done");
     toast("Lesson ready!", `${song.notes.length} notes found in “${song.title}”.`);
@@ -1215,6 +1251,7 @@ function bindUi() {
     updateControls();
   });
   $("musicButton").addEventListener("click", toggleMusic);
+  $("reanalyzeButton").addEventListener("click", reanalyzeSong);
   $("backingToggle").addEventListener("change", (e) => {
     settings.backing = e.target.checked;
     saveSettings();

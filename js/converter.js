@@ -44,8 +44,9 @@ async function decodeToModelRate(arrayBuffer) {
 
 function cleanNotes(rawNotes, minAmplitude) {
   let notes = rawNotes
-    .filter((n) => n.d >= 0.05 && (n.a ?? 1) >= minAmplitude && n.midi >= 21 && n.midi <= 108)
-    .map(({ t, d, midi, v }) => ({ t, d, midi, v }))
+    // Melody notes are kept as tracked; accompaniment drops quiet or very short blips (drums, noise).
+    .filter((n) => n.midi >= 21 && n.midi <= 108 && (n.m ? n.d >= 0.05 : n.d >= 0.08 && (n.a ?? 1) >= minAmplitude))
+    .map(({ t, d, midi, v, m }) => (m ? { t, d, midi, v, m: true } : { t, d, midi, v }))
     .sort((a, b) => a.t - b.t);
 
   if (notes.length > MAX_NOTES) notes = notes.slice(0, MAX_NOTES);
@@ -109,16 +110,54 @@ export async function midiFileToNotes(blob) {
   } catch (_error) {
     throw new Error("This doesn't look like a valid MIDI file.");
   }
+  const tracks = midi.tracks.filter((track) => track.notes.length && track.channel !== 9 && !track.instrument?.percussion); // skip drums
+  const melodyTrack = pickMelodyTrack(tracks);
   const notes = [];
-  for (const track of midi.tracks) {
-    if (track.channel === 9 || track.instrument?.percussion) continue; // skip drums
+  for (const track of tracks) {
+    const isMelody = track === melodyTrack;
+    const melodyNotes = isMelody ? new Set(skyline(track.notes)) : null;
     for (const n of track.notes) {
-      notes.push({ t: n.time, d: n.duration, midi: n.midi, v: Math.round(n.velocity * 127) });
+      const note = { t: n.time, d: n.duration, midi: n.midi, v: Math.round(n.velocity * 127) };
+      if (isMelody && melodyNotes.has(n)) note.m = true;
+      notes.push(note);
     }
   }
   const { notes: cleaned } = cleanNotes(notes, 0);
   if (cleaned.length === 0) throw new Error("This MIDI file has no playable piano notes.");
   return { notes: cleaned, title: midi.name || "" };
+}
+
+// The melody track: mostly in singing range, mostly one note at a time, and
+// the one that plays the most. Single-track files use their top line.
+function pickMelodyTrack(tracks) {
+  let best = null;
+  let bestScore = -Infinity;
+  for (const track of tracks) {
+    const ns = track.notes;
+    const inRange = ns.filter((n) => n.midi >= 55 && n.midi <= 88).length / ns.length;
+    const mono = skyline(ns).length / ns.length; // 1 = never plays chords
+    const meanPitch = ns.reduce((sum, n) => sum + n.midi, 0) / ns.length;
+    const coverage = Math.min(1, ns.reduce((sum, n) => sum + n.duration, 0) / Math.max(1, ns[ns.length - 1].time));
+    const nameHint = /melody|lead|vocal|voice|sing|right/i.test(track.name || "") ? 0.5 : 0;
+    const score = inRange * 1.5 + mono + coverage + (meanPitch - 60) / 24 + nameHint;
+    if (score > bestScore) {
+      bestScore = score;
+      best = track;
+    }
+  }
+  return best;
+}
+
+// Top note of each chord (notes starting within 50 ms).
+function skyline(notes) {
+  const sorted = [...notes].sort((a, b) => a.time - b.time || b.midi - a.midi);
+  const out = [];
+  for (const n of sorted) {
+    const prev = out[out.length - 1];
+    if (prev && n.time - prev.time < 0.05) continue;
+    out.push(n);
+  }
+  return out;
 }
 
 export async function downloadSongAsMidi(song) {

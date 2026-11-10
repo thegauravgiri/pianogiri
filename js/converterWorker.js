@@ -1,3 +1,5 @@
+import { extractMelody, accompanimentFrom } from "./melody.js";
+
 // Runs Spotify's Basic Pitch model (the model behind NeuralNote) off the main
 // thread so the page stays responsive. Receives mono 22.05 kHz samples.
 let modulesPromise = null;
@@ -38,6 +40,8 @@ self.onmessage = async (event) => {
     );
 
     self.postMessage({ type: "stage", stage: "notes" });
+    // Track the melody first, on the raw model output (the note builder below may adjust it in place).
+    const melody = extractMelody(contours, onsets);
     const events = bp.noteFramesToTime(
       bp.addPitchBendsToNoteEvents(
         contours,
@@ -45,14 +49,20 @@ self.onmessage = async (event) => {
       )
     );
 
-    const notes = events.map((n) => ({
-      t: n.startTimeSeconds,
-      d: n.durationSeconds,
-      midi: n.pitchMidi,
-      v: Math.round(40 + Math.min(1, n.amplitude) * 87),
-      a: n.amplitude,
-    }));
-    self.postMessage({ type: "done", notes });
+    const poly = events
+      .map((n) => ({
+        t: n.startTimeSeconds,
+        d: n.durationSeconds,
+        midi: n.pitchMidi,
+        v: Math.round(40 + Math.min(1, n.amplitude) * 87),
+        a: n.amplitude,
+      }))
+      .sort((a, b) => a.t - b.t);
+
+    // The tune the player should play, tracked from the pitch-salience map,
+    // plus everything else as accompaniment.
+    const accompaniment = accompanimentFrom(poly, melody);
+    self.postMessage({ type: "done", notes: [...melody, ...accompaniment] });
   } catch (error) {
     self.postMessage({ type: "error", message: error?.message || String(error) });
   }

@@ -20,7 +20,7 @@ export function normalizeSong(raw, source) {
   let notes;
   if (Array.isArray(raw.notes)) {
     notes = raw.notes.map((n) =>
-      Array.isArray(n) ? { t: n[0], d: n[1], midi: n[2], v: n[3] ?? 80 } : { t: n.t, d: n.d, midi: n.midi, v: n.v ?? 80 }
+      Array.isArray(n) ? { t: n[0], d: n[1], midi: n[2], v: n[3] ?? 80, m: n[4] === 1 } : { t: n.t, d: n.d, midi: n.midi, v: n.v ?? 80, m: Boolean(n.m) }
     );
   } else if (Array.isArray(raw.sequence)) {
     const step = raw.bpm ? 60 / raw.bpm : LEGACY_STEP_SECONDS;
@@ -36,7 +36,7 @@ export function normalizeSong(raw, source) {
 
   notes = notes
     .filter((n) => Number.isFinite(n.t) && Number.isFinite(n.d) && Number.isFinite(n.midi))
-    .map((n) => ({ t: Math.max(0, n.t), d: Math.max(0.05, n.d), midi: Math.round(n.midi), v: n.v }))
+    .map((n) => ({ t: Math.max(0, n.t), d: Math.max(0.05, n.d), midi: Math.round(n.midi), v: n.v, m: n.m || undefined }))
     .sort((a, b) => a.t - b.t || a.midi - b.midi);
 
   const last = notes.reduce((end, n) => Math.max(end, n.t + n.d), 0);
@@ -50,6 +50,7 @@ export function normalizeSong(raw, source) {
     createdAt: raw.createdAt || null,
     origin: raw.origin || null,
     hasAudio: Boolean(raw.hasAudio),
+    analysis: raw.analysis || 1,
     audioOffset: Number(raw.audioOffset) || 0,
     notes,
     duration: last,
@@ -72,8 +73,9 @@ function compact(song) {
     createdAt: song.createdAt,
     origin: song.origin,
     hasAudio: song.hasAudio,
+    analysis: song.analysis,
     audioOffset: round3(song.audioOffset || 0),
-    notes: song.notes.map((n) => [round3(n.t), round3(n.d), n.midi, Math.round(n.v ?? 80)]),
+    notes: song.notes.map((n) => (n.m ? [round3(n.t), round3(n.d), n.midi, Math.round(n.v ?? 80), 1] : [round3(n.t), round3(n.d), n.midi, Math.round(n.v ?? 80)])),
   };
 }
 
@@ -150,6 +152,15 @@ export function createSongService({ manifestPath }) {
     persistUserSongs();
   }
 
+  function replaceUserSongNotes(id, { notes, audioOffset, analysis }) {
+    const index = user.findIndex((s) => s.id === id);
+    if (index < 0) return null;
+    const old = user[index];
+    user[index] = normalizeSong({ ...old, difficulty: undefined, notes, audioOffset, analysis }, "user");
+    persistUserSongs();
+    return user[index];
+  }
+
   function markNoAudio(id) {
     const song = user.find((s) => s.id === id);
     if (song) {
@@ -158,5 +169,5 @@ export function createSongService({ manifestPath }) {
     }
   }
 
-  return { loadSongs, getAll, getById, addUserSong, removeUserSong, markNoAudio };
+  return { loadSongs, getAll, getById, addUserSong, removeUserSong, markNoAudio, replaceUserSongNotes };
 }
