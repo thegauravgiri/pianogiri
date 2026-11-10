@@ -3,7 +3,7 @@
 A small Cloud Run service. PianoGiri sends it a YouTube link, and it streams back the audio-only track (m4a when available). The browser then converts the audio to notes and keeps a copy so the original song can play along.
 
 - `GET /audio?url=<youtube link>` returns audio bytes, with `X-Title` and `X-Duration` headers.
-- `GET /healthz` returns `{"ok": true}`.
+- `GET /health` returns `{"ok": true}`.
 
 Guards:
 - **Origin allow-list** (`ALLOWED_ORIGINS`): other sites get a 403.

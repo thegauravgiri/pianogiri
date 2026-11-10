@@ -74,5 +74,5 @@ export const IMPORT = {
   midiLibrary: "https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js",
   // Set to a backend URL (for example a Cloud Run service) that accepts
   // GET ?url=<youtube link> and responds with audio bytes. Empty = disabled.
-  youtubeEndpoint: "",
+  youtubeEndpoint: "https://pianogiri-yt-tm2pg4owya-el.a.run.app",
 };

@@ -1,7 +1,7 @@
 """PianoGiri YouTube audio service.
 
 GET /audio?url=<youtube link>  -> streams the best audio-only track (m4a when available)
-GET /healthz                   -> "ok"
+GET /health                    -> {"ok": true}
 
 Only browsers on ALLOWED_ORIGINS may call it (CORS + Origin check), each IP gets
 RATE_LIMIT requests per hour, and videos longer than MAX_SECONDS are refused.
@@ -102,7 +102,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/healthz":
+        if parsed.path == "/health":  # Cloud Run reserves paths ending in "z"
             return self.send_json(200, {"ok": True})
         if parsed.path != "/audio":
             return self.send_json(404, {"error": "not_found"})
