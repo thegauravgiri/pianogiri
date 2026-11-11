@@ -18,6 +18,7 @@ A free, browser-based falling-notes piano game. Notes rain down onto the keys: t
 - **Game loop**: score, combo with ×2–×4 multiplier, live accuracy, stars, S–D grades, personal bests, XP and levels, daily streak, 5-minute daily goal, 10 badges, and "next challenge" suggestions.
 - **Inputs**: computer keyboard, mouse/multi-touch (with glissando), and USB/Bluetooth MIDI keyboards (Web MIDI; sustain pedal supported).
 - **Make a lesson**: upload audio (MP3/WAV/M4A/OGG, up to 8 min), record from the mic, record a YouTube video's tab audio while it plays (desktop Chrome/Edge), or import a MIDI file. Audio is converted with [Basic Pitch](https://github.com/spotify/basic-pitch-ts), the model behind [NeuralNote](https://github.com/DamRsn/NeuralNote). It runs in a Web Worker on the user's device, so no server is needed and no audio is uploaded. Lessons can be downloaded as `.mid`.
+- **Finds the sung tune**: the singing voice is first split from the band with [Spleeter](https://github.com/deezer/spleeter) (a 20 MB model run with onnxruntime-web, on WebGPU when available). Basic Pitch then runs on both the voice and the full mix. The melody is tracked on the voice while someone sings, and on the mix during intros, solos and instrumental songs. Bass and chords for Medium and Hard come from the mix.
 - **Free play** with a rising-notes visualiser, sustain, octave and velocity controls.
 
 ## Keyboard
@@ -67,6 +68,7 @@ Everything runs client-side, so the site stays on **GitHub Pages (free)**:
 | Site               | GitHub Pages + custom domain (`CNAME`) | $0   |
 | Piano samples      | tonejs.github.io                     | $0   |
 | AI model + libs    | jsDelivr / cdnjs CDNs                | $0   |
+| Voice model (20 MB)| GitHub Pages (`models/`)             | $0   |
 | Audio → MIDI       | User's browser (Web Worker, WebGL)   | $0   |
 
 ### YouTube import
@@ -85,4 +87,4 @@ No build step. Serve the folder with any static server, e.g. `python3 -m http.se
 
 ## Tech
 
-HTML, CSS, vanilla JS modules · Tone.js + Salamander piano samples · Canvas 2D · Web MIDI · Basic Pitch (TensorFlow.js) · @tonejs/midi
+HTML, CSS, vanilla JS modules · Tone.js + Salamander piano samples · Canvas 2D · Web MIDI · Basic Pitch (TensorFlow.js) · Spleeter (onnxruntime-web) · @tonejs/midi

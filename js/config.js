@@ -68,10 +68,13 @@ export const ADS = {
 // Song import
 export const IMPORT = {
   // Bump when the melody finder improves: older lessons with saved audio offer a re-analyze.
-  analysisVersion: 3,
+  analysisVersion: 4,
   maxAudioSeconds: 8 * 60,
   basicPitchModule: "https://cdn.jsdelivr.net/npm/@spotify/basic-pitch@1.0.1/+esm",
   basicPitchModel: "https://cdn.jsdelivr.net/npm/@spotify/basic-pitch@1.0.1/model/model.json",
   tfModule: "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.19.0/+esm",
+  // Voice separation (Spleeter 2-stem vocal model, ~20 MB, downloaded once and cached).
+  ortModule: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.webgpu.min.mjs",
+  ortWasmPaths: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/",
   midiLibrary: "https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js",
 };

@@ -44,6 +44,11 @@ export const MELODY_DEFAULTS = {
   minReattackSeconds: 0.15,
 };
 
+// Settings for evidence that mostly comes from the separated voice (see
+// converterWorker.js): the voice is cleaner, so the line may move more freely and
+// start and stop more readily, while a firmer register prior keeps it on the singer.
+export const MELODY_HYBRID = { voicingCost: 0.6, priorWeight: 1.2, moveCost: 0.06, changeCost: 0.1 };
+
 export function extractMelody(contours, onsets, options = {}) {
   const o = { ...MELODY_DEFAULTS, ...options };
   if (o.centerMidi !== "auto") return trackMelody(contours, onsets, o);

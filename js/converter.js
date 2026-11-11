@@ -57,7 +57,14 @@ function cleanNotes(rawNotes, minAmplitude) {
   return { notes: notes.map((n) => ({ ...n, t: n.t - shift })), shift };
 }
 
-const MODEL_URLS = { tfModule: IMPORT.tfModule, basicPitchModule: IMPORT.basicPitchModule, basicPitchModel: IMPORT.basicPitchModel };
+const MODEL_URLS = {
+  tfModule: IMPORT.tfModule,
+  basicPitchModule: IMPORT.basicPitchModule,
+  basicPitchModel: IMPORT.basicPitchModel,
+  ortModule: IMPORT.ortModule,
+  ortWasmPaths: IMPORT.ortWasmPaths,
+  separatorModel: new URL("../models/spleeter-vocals.fp16.onnx", import.meta.url).href,
+};
 
 // One conversion session with the worker. Audio can be appended in pieces;
 // each model window runs as soon as its audio is complete.
