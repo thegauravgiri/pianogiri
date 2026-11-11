@@ -26,21 +26,47 @@ const MIDI_OFFSET = 21;
 export const MELODY_DEFAULTS = {
   minMidi: 48, // C3 – lowest melody note considered
   maxMidi: 88, // E6 – highest
-  centerMidi: 68, // register prior: melodies sit around here
+  // Tuned on real recordings (low male voice + orchestra, high female voice,
+  // Nepali pop) scored against their separated vocal lines.
+  centerMidi: "auto", // register prior centre: "auto" detects it per song, or a MIDI number
+  fallbackCenter: 68,
+  priorWeight: 0.6,
+  priorWidth: 14,
   voicingThreshold: 0.28, // salience below this is treated as "no melody"
-  moveCost: 0.06, // per contour bin (1/3 semitone) of pitch movement
-  changeCost: 0.35, // extra cost for any pitch change
-  voicingCost: 1.2, // cost to switch between melody and silence
+  moveCost: 0.1, // per contour bin (1/3 semitone) of pitch movement: discourages octave hops
+  changeCost: 0.2, // extra cost for any pitch change
+  voicingCost: 3, // cost to switch between melody and silence: fewer stray fill notes
   onsetWeight: 1.5, // pull the line onto a pitch at the moment a note starts there
-  hysteresis: 0.7, // semitones the pitch must move before a new note starts
-  minNoteSeconds: 0.07,
-  reattackOnset: 0.8, // onset strength that may re-strike a repeated pitch…
+  hysteresis: 0.5, // semitones the pitch must move before a new note starts
+  minNoteSeconds: 0.1, // shorter blips merge into a neighbour or are dropped
+  reattackOnset: 0.6, // onset strength that may re-strike a repeated pitch…
   reattackDip: 0.55, // …but only if loudness dipped below this share of the note's average first
   minReattackSeconds: 0.15,
 };
 
 export function extractMelody(contours, onsets, options = {}) {
   const o = { ...MELODY_DEFAULTS, ...options };
+  if (o.centerMidi !== "auto") return trackMelody(contours, onsets, o);
+  // Singers sit anywhere from a low male voice (~G3) to a high female one (~G5).
+  // Find where this song's line lives with an unbiased pass, then track again
+  // with the register prior centred there.
+  const first = trackMelody(contours, onsets, { ...o, centerMidi: o.fallbackCenter, priorWeight: 0 });
+  return trackMelody(contours, onsets, { ...o, centerMidi: registerOf(first, o) });
+}
+
+function registerOf(notes, o) {
+  const total = notes.reduce((sum, n) => sum + n.d, 0);
+  if (!total) return o.fallbackCenter;
+  const sorted = [...notes].sort((a, b) => a.midi - b.midi);
+  let acc = 0;
+  for (const n of sorted) {
+    acc += n.d;
+    if (acc >= total / 2) return Math.max(o.minMidi + 4, Math.min(o.maxMidi - 4, n.midi));
+  }
+  return o.fallbackCenter;
+}
+
+function trackMelody(contours, onsets, o) {
   const nFrames = contours.length;
   if (!nFrames) return [];
 
@@ -53,7 +79,7 @@ export function extractMelody(contours, onsets, options = {}) {
   const prior = new Float32Array(K);
   for (let k = 0; k < K; k += 1) {
     const midi = MIDI_OFFSET + (lo + k) / BINS_PER_SEMITONE;
-    prior[k] = -0.5 * ((midi - o.centerMidi) / 14) ** 2 * 0.6;
+    prior[k] = -0.5 * ((midi - o.centerMidi) / o.priorWidth) ** 2 * o.priorWeight;
   }
   const unvoicedScore = Math.log(o.voicingThreshold);
 

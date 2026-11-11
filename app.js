@@ -357,7 +357,7 @@ async function reanalyzeSong() {
         button.textContent = `Listening… ${Math.round(p * 100)}%`;
       },
     });
-    const updated = songService.replaceUserSongNotes(song.id, { notes: result.notes, audioOffset: result.shift, analysis: 2 });
+    const updated = songService.replaceUserSongNotes(song.id, { notes: result.notes, audioOffset: result.shift, analysis: IMPORT.analysisVersion });
     if (app.song?.id !== song.id) return;
     app.song = updated;
     unloadMusic();
@@ -437,7 +437,7 @@ function syncSetupControls() {
   $("speedOut").textContent = `${Math.round(settings.speed * 100)}%`;
   $("backingToggle").checked = settings.backing;
   $("musicToggleRow").hidden = !song.hasAudio;
-  $("reanalyzeRow").hidden = !(song.source === "user" && song.hasAudio && song.analysis < 2);
+  $("reanalyzeRow").hidden = !(song.source === "user" && song.hasAudio && song.analysis < IMPORT.analysisVersion);
   $("musicToggle").checked = settings.music;
   $("musicToggle").disabled = song.hasAudio && !songHasMusic();
   $("backingToggleRow").hidden = song.hasAudio && settings.music;
@@ -1152,7 +1152,7 @@ async function saveLesson({ origin, notes, audioOffset = 0, audioBlob = null, ti
       toast("Couldn't save the song audio", "You can still play the lesson, just without the original music.");
     }
   }
-  const analysis = origin === "midi" ? 1 : 2; // 2 = tracked melody (see js/melody.js)
+  const analysis = origin === "midi" ? 1 : IMPORT.analysisVersion; // see js/melody.js
   const song = songService.addUserSong({ id, title: title || "My song", artist, origin, notes, hasAudio, audioOffset, analysis });
   profile.recordConversion().forEach((a) => toast(`Badge unlocked: ${a.title}`, a.text));
   toast("Lesson ready!", `${song.notes.filter((n) => n.m).length || song.notes.length} melody notes in “${song.title}”.`);
