@@ -863,8 +863,8 @@ function openImport() {
   document.querySelector('[data-import-tab="youtube"] .soon').hidden = true;
   $("youtubeNotice").hidden = TAB_SUPPORT.ok;
   $("youtubeNotice").textContent = TAB_SUPPORT.reason || "";
-  $("youtubeSteps").hidden = !TAB_SUPPORT.ok;
-  $("youtubeInput").disabled = !TAB_SUPPORT.ok;
+  $("youtubeFlow").hidden = !TAB_SUPPORT.ok;
+  if (!importState.capture) setYtStep(isYoutubeUrl($("youtubeInput").value) ? Math.max(2, yt.step) : 1);
   $("importDialog").showModal();
   updateImportButton();
 }
@@ -893,11 +893,76 @@ function updateImportButton() {
     (importState.tab === "audio" && importState.file) ||
     (importState.tab === "midi" && importState.midiFile) ||
     (importState.tab === "record" && importState.recordedBlob && !importState.recording) ||
-    (importState.tab === "youtube" && TAB_SUPPORT.ok && isYoutubeUrl($("youtubeInput").value));
-  $("importConvert").disabled = !ready || (importState.busy && !importState.capture);
-  $("importConvert").textContent =
-    importState.tab !== "youtube" ? "Create lesson" : importState.capture ? "Stop & create lesson" : "Record";
-  $("youtubeOpen").disabled = !isYoutubeUrl($("youtubeInput").value) || Boolean(importState.capture);
+    false; // YouTube has its own step buttons
+  $("importConvert").disabled = !ready || importState.busy;
+  $("importConvert").hidden = importState.tab === "youtube";
+}
+
+/* YouTube guided steps ------------------------------------------------ */
+// 1 paste link → 2 open the video → 3 record. Only the current step is open;
+// finished steps collapse to a ✓ and can be clicked to go back.
+
+const yt = { step: 1, opened: false, metaFor: null, meta: null };
+
+function youtubeId(text) {
+  const m = String(text).trim().match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/live\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+function youtubeUrl() {
+  const id = youtubeId($("youtubeInput").value);
+  return id ? `https://www.youtube.com/watch?v=${id}` : null;
+}
+
+function setYtStep(step) {
+  yt.step = step;
+  document.querySelectorAll(".yt-step").forEach((li) => {
+    const n = Number(li.dataset.ytStep);
+    li.classList.toggle("active", n === step);
+    li.classList.toggle("done", n < step);
+    li.classList.toggle("todo", n > step);
+  });
+  $("ytSummary1").textContent = step > 1 ? yt.meta?.title || youtubeUrl() || "" : "";
+  $("ytSummary2").textContent = step > 2 ? (yt.opened ? "Opened" : "Already open") : "";
+  $("youtubeOpen").textContent = yt.opened ? "Open it again" : "Open video in a new tab";
+  $("pmTitle").textContent = `${yt.meta?.title || "Your YouTube video"} – YouTube`;
+  if (step === 1) setTimeout(() => $("youtubeInput").focus(), 30);
+  if (step === 2) setTimeout(() => $("youtubeOpen").focus(), 30);
+  if (step === 3) setTimeout(() => $("ytRecord").focus(), 30);
+}
+
+async function onYoutubeLinkChange() {
+  const id = youtubeId($("youtubeInput").value);
+  $("ytNext1").disabled = !id;
+  $("ytPreview").hidden = !id;
+  if (!id) return;
+  if (yt.metaFor !== id) {
+    yt.metaFor = id;
+    yt.meta = null;
+    yt.opened = false;
+    $("ytThumb").src = `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
+    $("ytTitle").textContent = "Looking up the video…";
+    $("ytChannel").textContent = "";
+    const meta = await youtubeTitle(youtubeUrl());
+    if (yt.metaFor !== id) return;
+    yt.meta = meta;
+    $("ytTitle").textContent = meta?.title || "YouTube video";
+    $("ytChannel").textContent = meta?.artist || "";
+  }
+}
+
+function openYoutubeVideo() {
+  const url = youtubeUrl();
+  if (!url) return;
+  // A named tab: "Open it again" reuses it instead of piling up tabs.
+  window.open(url, "pianogiri-youtube");
+  yt.opened = true;
+  $("youtubeOpen").textContent = "Open it again";
+}
+
+function showYoutubeRecorder(recording) {
+  $("youtubeFlow").hidden = recording;
+  $("tabRecorder").hidden = !recording;
 }
 
 /* YouTube via tab-audio capture ------------------------------------- */
@@ -906,8 +971,8 @@ function updateImportButton() {
 // lesson is ready as soon as recording ends.
 function startYoutubeCapture() {
   $("importError").hidden = true;
-  const url = $("youtubeInput").value.trim();
-  const capture = { cancelled: false, controller: null, session: null, meta: youtubeTitle(url) };
+  const url = youtubeUrl();
+  const capture = { cancelled: false, controller: null, session: null, meta: yt.meta ? Promise.resolve(yt.meta) : youtubeTitle(url) };
   importState.capture = capture;
   importState.busy = true;
   updateImportButton();
@@ -937,22 +1002,24 @@ function startYoutubeCapture() {
       const quiet = !waiting && silentFor >= 3;
       $("keepWaitingButton").hidden = !quiet;
       $("tabRecordStatus").textContent = waiting
-        ? "Waiting for the music… press play on the video."
+        ? "▶ Now press play on the YouTube tab."
         : quiet
-          ? `Silence — if the song is over, your lesson is made in ${Math.max(0, Math.ceil(finishAt - silentFor))} s.`
-          : "Recording… song over? Press “Stop & create lesson” — or we'll stop by ourselves.";
+          ? `It's gone quiet. If the song is over, your lesson opens in ${Math.max(0, Math.ceil(finishAt - silentFor))} s.`
+          : "Recording. Come back to this tab any time; we stop when the song ends.";
     },
   })
     .then((controller) => {
       capture.controller = controller;
       if (capture.cancelled) return controller.stop();
-      $("tabRecorder").hidden = false;
+      showYoutubeRecorder(true);
       $("tabLiveStatus").textContent = "";
+      $("tabRecordTimer").textContent = "0:00";
       updateImportButton();
       return controller.done.then(async ({ wav }) => {
         if (capture.cancelled) return;
         $("tabRecordStatus").textContent = "Finishing your lesson…";
         $("keepWaitingButton").hidden = true;
+        $("ytStop").disabled = true;
         const { notes, shift } = await session.finish();
         const meta = await capture.meta;
         endCapture(capture);
@@ -961,9 +1028,14 @@ function startYoutubeCapture() {
           notes,
           audioOffset: shift,
           audioBlob: wav,
-          title: $("importTitleInput").value.trim() || meta?.title || "YouTube song",
+          title: $("importTitleInput").value.trim() || yt.meta?.title || meta?.title || "YouTube song",
           artist: meta?.artist || "From YouTube",
         });
+        $("youtubeInput").value = "";
+        yt.metaFor = null;
+        yt.opened = false;
+        $("ytPreview").hidden = true;
+        setYtStep(1);
         document.title = "✓ Lesson ready – PianoGiri";
         setTimeout(() => (document.title = PAGE_TITLE), 6000);
       });
@@ -977,8 +1049,9 @@ function endCapture(capture, error) {
     importState.busy = false;
   }
   if (error) capture.session?.cancel();
-  $("tabRecorder").hidden = true;
+  showYoutubeRecorder(false);
   $("keepWaitingButton").hidden = true;
+  $("ytStop").disabled = false;
   document.title = PAGE_TITLE;
   if (error && !capture.cancelled && error.message !== "cancelled") {
     $("importError").textContent = error.message;
@@ -1141,24 +1214,33 @@ function bindImport() {
   $("importOpen").addEventListener("click", openImport);
   $("importClose").addEventListener("click", closeImport);
   $("importCancel").addEventListener("click", closeImport);
-  $("importConvert").addEventListener("click", () => {
-    if (importState.tab !== "youtube") return runImport();
-    if (importState.capture) return importState.capture.controller?.stop();
-    return startYoutubeCapture();
-  });
+  $("importConvert").addEventListener("click", runImport);
   $("keepWaitingButton").addEventListener("click", () => importState.capture?.controller?.keepWaiting());
-  // Pasting a link opens the video straight away (the paste counts as a click for pop-up rules).
-  $("youtubeInput").addEventListener("paste", (event) => {
-    const text = (event.clipboardData?.getData("text") || "").trim();
-    if (!isYoutubeUrl(text) || importState.capture) return;
-    window.open(text.startsWith("http") ? text : `https://${text}`, "_blank", "noopener");
-    $("youtubeNotice").hidden = false;
-    $("youtubeNotice").textContent = "Opened in a new tab. Pause it at the start, then come back and press Record.";
+  $("youtubeInput").addEventListener("input", onYoutubeLinkChange);
+  $("youtubeInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && youtubeId($("youtubeInput").value)) setYtStep(2);
   });
-  $("youtubeOpen").addEventListener("click", () => {
-    const url = $("youtubeInput").value.trim();
-    if (isYoutubeUrl(url)) window.open(url.startsWith("http") ? url : `https://${url}`, "_blank", "noopener");
+  $("ytNext1").addEventListener("click", () => setYtStep(2));
+  $("youtubeOpen").addEventListener("click", openYoutubeVideo);
+  $("ytSkip2").addEventListener("click", () => setYtStep(3));
+  $("ytRecord").addEventListener("click", startYoutubeCapture);
+  $("ytStop").addEventListener("click", () => importState.capture?.controller?.stop());
+  $("ytCancelRecording").addEventListener("click", () => {
+    cancelTabCapture();
+    setYtStep(3);
   });
+  document.querySelectorAll(".yt-step").forEach((li) =>
+    li.querySelector(".yt-step-head").addEventListener("click", () => {
+      const n = Number(li.dataset.ytStep);
+      if (n < yt.step && !importState.capture) setYtStep(n);
+    })
+  );
+  // Coming back from the video tab moves step 2 → 3 by itself.
+  const returnedFromVideo = () => {
+    if (document.visibilityState === "visible" && yt.step === 2 && yt.opened && $("importDialog").open) setYtStep(3);
+  };
+  window.addEventListener("focus", returnedFromVideo);
+  document.addEventListener("visibilitychange", returnedFromVideo);
   $("importDialog").addEventListener("cancel", (e) => {
     if (importState.busy && !importState.capture) e.preventDefault();
     else if (importState.capture) cancelTabCapture();
@@ -1204,7 +1286,7 @@ function bindImport() {
   });
 
   $("recordButton").addEventListener("click", () => (importState.recording ? stopRecording() : startRecording()));
-  $("youtubeInput").addEventListener("input", updateImportButton);
+
 }
 
 /* ------------------------------------------------------------------ */

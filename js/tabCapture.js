@@ -54,9 +54,12 @@ export function tabCaptureSupport() {
 // Returns { stop(), keepWaiting(), done: Promise<{ wav: Blob, seconds }> }.
 export async function startTabCapture({ onPcm, onLevel, onTick } = {}) {
   const ctx = new AudioContext({ sampleRate: CAPTURE_RATE });
+  // After sharing, take the user straight to the video so they can press play.
+  const focus = typeof CaptureController !== "undefined" ? new CaptureController() : undefined;
   let stream;
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
+      controller: focus,
       video: { displaySurface: "browser", frameRate: 1, width: 320, height: 180 },
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false },
       preferCurrentTab: false,
@@ -69,6 +72,12 @@ export async function startTabCapture({ onPcm, onLevel, onTick } = {}) {
     ctx.close();
     if (error?.name === "NotAllowedError") throw new Error("Sharing was cancelled. Click Record and pick the YouTube tab.");
     throw new Error("Couldn't start tab sharing in this browser.");
+  }
+
+  try {
+    focus?.setFocusBehavior?.("focus-captured-surface");
+  } catch (_error) {
+    // Too late or unsupported: Chrome's default also switches to the shared tab.
   }
 
   const audioTracks = stream.getAudioTracks();

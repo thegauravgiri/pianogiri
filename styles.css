@@ -1681,17 +1681,306 @@ select,
   font-size: 0.9rem;
 }
 
-.yt-steps {
+/* YouTube guided flow */
+.yt-flow {
+  list-style: none;
   margin: 0;
-  padding-left: 1.2rem;
+  padding: 0;
   display: grid;
-  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.yt-step {
+  min-width: 0;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.15);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    opacity 160ms ease;
+}
+
+.yt-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.yt-num {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.yt-summary {
+  margin-left: auto;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+
+.yt-step-body {
+  display: none;
+  gap: 0.7rem;
+  padding: 0 0.85rem 0.9rem 3rem;
   font-size: 0.9rem;
   color: #cfe0ea;
 }
 
-.yt-steps li > .btn {
-  margin-right: 0.4rem;
+.yt-step-body p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.yt-step-body > .btn,
+.yt-step-body > .link-btn {
+  justify-self: start;
+}
+
+.yt-step-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.import-card {
+  min-width: 0;
+}
+
+.import-panel {
+  min-width: 0;
+}
+
+.yt-step-body input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.yt-step.active {
+  border-color: var(--primary);
+  background: linear-gradient(160deg, rgba(251, 107, 61, 0.12), rgba(0, 0, 0, 0.15));
+}
+
+.yt-step.active .yt-num {
+  background: var(--primary);
+  color: #fff;
+}
+
+.yt-step.active .yt-step-body {
+  display: grid;
+  animation: settle 260ms ease;
+}
+
+.yt-step.done .yt-num {
+  background: var(--accent);
+  color: #fff;
+  font-size: 0;
+}
+
+.yt-step.done .yt-num::after {
+  content: "✓";
+  font-size: 0.85rem;
+}
+
+.yt-step.done {
+  cursor: pointer;
+}
+
+.yt-step.todo {
+  opacity: 0.5;
+}
+
+.yt-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.yt-preview img {
+  border-radius: 8px;
+  object-fit: cover;
+  background: #000;
+  flex-shrink: 0;
+}
+
+.yt-preview div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.yt-preview strong {
+  color: var(--text);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.yt-preview span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* A miniature of Chrome's share window so people know what to click. */
+.picker-mock {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.7rem;
+  border-radius: 10px;
+  background: #f4f6f8;
+  color: #202124;
+  font-size: 0.72rem;
+  max-width: 330px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pm-title {
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.pm-tabs {
+  display: flex;
+  gap: 0.8rem;
+  border-bottom: 1px solid #dadce0;
+  padding-bottom: 0.25rem;
+  color: #5f6368;
+}
+
+.pm-tabs .on {
+  color: #1a73e8;
+  font-weight: 700;
+  box-shadow: 0 0.3rem 0 -0.05rem #1a73e8;
+}
+
+.pm-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pm-row i {
+  width: 12px;
+  height: 9px;
+  border-radius: 2px;
+  background: #ff0000;
+  flex-shrink: 0;
+}
+
+.pm-row:not(.on) i {
+  background: #bdc1c6;
+}
+
+.pm-row.on {
+  background: #e8f0fe;
+  outline: 2px solid #1a73e8;
+}
+
+.pm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.2rem;
+}
+
+.pm-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 999px;
+  padding-right: 0.3rem;
+}
+
+.pm-toggle b {
+  width: 22px;
+  height: 12px;
+  border-radius: 99px;
+  background: #1a73e8;
+  position: relative;
+}
+
+.pm-toggle b::after {
+  content: "";
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.pm-share {
+  padding: 0.25rem 0.8rem;
+  border-radius: 999px;
+  background: #1a73e8;
+  color: #fff;
+  font-weight: 700;
+}
+
+#ytRecord .rec-dot {
+  animation: none;
+  background: #fff;
+}
+
+.rec-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-basis: 100%;
+}
+
+.rec-status {
+  margin: 0;
+  flex-basis: 100%;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.rec-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  flex-basis: 100%;
+}
+
+.import-options summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.import-options[open] {
+  display: grid;
+  gap: 0.8rem;
 }
 
 .tab-recorder {
@@ -1728,12 +2017,6 @@ select,
   font-family: var(--font-mono);
 }
 
-.tab-recorder #tabRecordStatus {
-  flex-basis: 100%;
-  color: #cfe0ea;
-  font-size: 0.85rem;
-}
-
 .rec-dot {
   width: 12px;
   height: 12px;
@@ -1744,6 +2027,7 @@ select,
 
 .tab-recorder .level {
   flex: 1;
+  min-width: 80px;
   height: 8px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.12);

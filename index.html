@@ -379,39 +379,79 @@
         </div>
 
         <div class="import-panel" data-import-panel="youtube" hidden>
-          <label class="field">
-            <span>YouTube link</span>
-            <input type="url" id="youtubeInput" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" />
-          </label>
           <p class="notice" id="youtubeNotice" hidden></p>
-          <ol class="yt-steps" id="youtubeSteps">
-            <li>Paste the link. The video opens in a new tab; <strong>pause it at the start</strong> (skip any ad first).</li>
-            <li><strong>Record</strong> below, choose that tab and keep <em>“Also share tab audio”</em> on.</li>
-            <li>Play the video. Your lesson is ready the moment the song ends. <button class="link-btn" type="button" id="youtubeOpen" disabled>Open the video again</button></li>
+          <ol class="yt-flow" id="youtubeFlow">
+            <li class="yt-step" data-yt-step="1">
+              <div class="yt-step-head"><span class="yt-num">1</span><strong>Paste a YouTube link</strong><span class="yt-summary" id="ytSummary1"></span></div>
+              <div class="yt-step-body">
+                <input type="url" id="youtubeInput" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off" aria-label="YouTube link" />
+                <div class="yt-preview" id="ytPreview" hidden>
+                  <img id="ytThumb" alt="" width="120" height="68" />
+                  <div><strong id="ytTitle">YouTube video</strong><span id="ytChannel"></span></div>
+                </div>
+                <button class="btn primary" type="button" id="ytNext1" disabled>Next</button>
+              </div>
+            </li>
+            <li class="yt-step" data-yt-step="2">
+              <div class="yt-step-head"><span class="yt-num">2</span><strong>Open the video</strong><span class="yt-summary" id="ytSummary2"></span></div>
+              <div class="yt-step-body">
+                <p>It opens in a new tab. <strong>Pause it at the very start</strong> (skip any ad), then come back to this tab.</p>
+                <button class="btn primary" type="button" id="youtubeOpen">Open video in a new tab</button>
+                <button class="link-btn" type="button" id="ytSkip2">It's already open</button>
+              </div>
+            </li>
+            <li class="yt-step" data-yt-step="3">
+              <div class="yt-step-head"><span class="yt-num">3</span><strong>Record it</strong></div>
+              <div class="yt-step-body">
+                <p>
+                  Press <strong>Record</strong>. In Chrome's window, pick the YouTube tab, keep <strong>Also share tab audio</strong> on, and click
+                  <strong>Share</strong>. Chrome then takes you to the video: <strong>press play</strong>.
+                </p>
+                <div class="picker-mock" aria-hidden="true">
+                  <div class="pm-title">Choose what to share</div>
+                  <div class="pm-tabs"><span class="on">Chrome tab</span><span>Window</span><span>Entire screen</span></div>
+                  <div class="pm-row on"><i></i><span id="pmTitle">Your YouTube video – YouTube</span></div>
+                  <div class="pm-row"><i></i><span>Other tab</span></div>
+                  <div class="pm-foot">
+                    <span class="pm-toggle"><b></b>Also share tab audio</span><span class="pm-share">Share</span>
+                  </div>
+                </div>
+                <button class="btn primary big" type="button" id="ytRecord"><span class="rec-dot" aria-hidden="true"></span> Record</button>
+              </div>
+            </li>
           </ol>
           <div class="tab-recorder" id="tabRecorder" hidden>
-            <span class="rec-dot" aria-hidden="true"></span>
-            <strong id="tabRecordTimer">0:00</strong>
-            <div class="level" aria-hidden="true"><div id="tabLevel"></div></div>
-            <span id="tabRecordStatus">Waiting for the music… press play on the video</span>
-            <span id="tabLiveStatus" class="live-status"></span>
-            <button class="btn ghost small" type="button" id="keepWaitingButton" hidden>Keep waiting</button>
+            <div class="rec-head">
+              <span class="rec-dot" aria-hidden="true"></span>
+              <strong id="tabRecordTimer">0:00</strong>
+              <div class="level" aria-hidden="true"><div id="tabLevel"></div></div>
+            </div>
+            <p class="rec-status" id="tabRecordStatus">Now press play on the YouTube tab.</p>
+            <p class="live-status" id="tabLiveStatus"></p>
+            <div class="rec-actions">
+              <button class="btn primary" type="button" id="ytStop">Song's over: make my lesson</button>
+              <button class="btn ghost small" type="button" id="keepWaitingButton" hidden>Keep waiting</button>
+              <button class="link-btn" type="button" id="ytCancelRecording">Cancel recording</button>
+            </div>
           </div>
         </div>
 
-        <label class="select" id="detailRow">
-          <span>Detail</span>
-          <select id="detailSelect">
-            <option value="low">Simple – only the clearest notes</option>
-            <option value="medium" selected>Balanced</option>
-            <option value="high">Detailed – catch quiet notes too</option>
-          </select>
-        </label>
+        <details class="import-options" id="importOptions">
+          <summary>Options</summary>
+          <label class="select" id="detailRow">
+            <span>Detail</span>
+            <select id="detailSelect">
+              <option value="low">Simple – only the clearest notes</option>
+              <option value="medium" selected>Balanced</option>
+              <option value="high">Detailed – catch quiet notes too</option>
+            </select>
+          </label>
 
-        <label class="field">
-          <span>Song title</span>
-          <input type="text" id="importTitleInput" maxlength="80" placeholder="My song" />
-        </label>
+          <label class="field">
+            <span>Song title</span>
+            <input type="text" id="importTitleInput" maxlength="80" placeholder="My song" />
+          </label>
+        </details>
 
         <div class="convert-progress" id="convertProgress" hidden>
           <ol class="stages">
