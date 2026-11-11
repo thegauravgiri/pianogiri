@@ -923,8 +923,8 @@ function setYtStep(step) {
     li.classList.toggle("todo", n > step);
   });
   $("ytSummary1").textContent = step > 1 ? yt.meta?.title || youtubeUrl() || "" : "";
-  $("ytSummary2").textContent = step > 2 ? (yt.opened ? "Opened" : "Already open") : "";
-  $("youtubeOpen").textContent = yt.opened ? "Open it again" : "Open video in a new tab";
+  $("ytSummary2").textContent = step > 2 ? (yt.opened ? (yt.inWindow ? "Open in a small window" : "Open in a new tab") : "Already open") : "";
+  $("youtubeOpen").textContent = yt.opened ? "Open it again" : "Open video";
   $("pmTitle").textContent = `${yt.meta?.title || "Your YouTube video"} – YouTube`;
   if (step === 1) setTimeout(() => $("youtubeInput").focus(), 30);
   if (step === 2) setTimeout(() => $("youtubeOpen").focus(), 30);
@@ -951,13 +951,22 @@ async function onYoutubeLinkChange() {
   }
 }
 
+// Opens the video in a small window in the corner of the screen, so PianoGiri
+// (and step 3) stays in view. Chrome lists that window's video under
+// "Chrome tab" in the share dialog, with audio. Named, so "Open it again"
+// reuses it. Falls back to a normal tab if the small window is blocked.
 function openYoutubeVideo() {
   const url = youtubeUrl();
   if (!url) return;
-  // A named tab: "Open it again" reuses it instead of piling up tabs.
-  window.open(url, "pianogiri-youtube");
+  const w = Math.min(640, Math.round(screen.availWidth * 0.4));
+  const h = Math.round(w * 0.75);
+  const left = (screen.availLeft ?? 0) + screen.availWidth - w - 24;
+  const top = (screen.availTop ?? 0) + screen.availHeight - h - 48;
+  const win = window.open(url, "pianogiri-youtube", `popup,width=${w},height=${h},left=${left},top=${top}`);
   yt.opened = true;
-  $("youtubeOpen").textContent = "Open it again";
+  yt.inWindow = Boolean(win);
+  if (!win) window.open(url, "_blank");
+  setYtStep(3);
 }
 
 function showYoutubeRecorder(recording) {
@@ -1235,12 +1244,7 @@ function bindImport() {
       if (n < yt.step && !importState.capture) setYtStep(n);
     })
   );
-  // Coming back from the video tab moves step 2 → 3 by itself.
-  const returnedFromVideo = () => {
-    if (document.visibilityState === "visible" && yt.step === 2 && yt.opened && $("importDialog").open) setYtStep(3);
-  };
-  window.addEventListener("focus", returnedFromVideo);
-  document.addEventListener("visibilitychange", returnedFromVideo);
+
   $("importDialog").addEventListener("cancel", (e) => {
     if (importState.busy && !importState.capture) e.preventDefault();
     else if (importState.capture) cancelTabCapture();
