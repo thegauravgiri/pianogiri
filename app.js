@@ -11,7 +11,7 @@ import { createProfile, ACHIEVEMENTS } from "./js/profile.js";
 import { renderAd } from "./js/ads.js";
 import { audioStore } from "./js/audioStore.js";
 import { createMusicPlayer } from "./js/musicPlayer.js";
-import { audioToNotes, midiFileToNotes, downloadSongAsMidi, isYoutubeUrl } from "./js/converter.js";
+import { audioToNotes, createLiveConverter, midiFileToNotes, downloadSongAsMidi, isYoutubeUrl } from "./js/converter.js";
 import { tabCaptureSupport, startTabCapture, youtubeTitle } from "./js/tabCapture.js";
 
 const $ = (id) => document.getElementById(id);
@@ -852,7 +852,7 @@ function toast(title, text = "") {
 /* Import dialog                                                        */
 /* ------------------------------------------------------------------ */
 
-const importState = { tab: "audio", file: null, midiFile: null, recording: null, recordedBlob: null, busy: false, capture: null, youtubeBlob: null };
+const importState = { tab: "audio", file: null, midiFile: null, recording: null, recordedBlob: null, busy: false, capture: null };
 const TAB_SUPPORT = tabCaptureSupport();
 const PAGE_TITLE = document.title;
 
@@ -896,71 +896,104 @@ function updateImportButton() {
     (importState.tab === "youtube" && TAB_SUPPORT.ok && isYoutubeUrl($("youtubeInput").value));
   $("importConvert").disabled = !ready || (importState.busy && !importState.capture);
   $("importConvert").textContent =
-    importState.tab !== "youtube" ? "Create lesson" : importState.capture ? "Stop & create lesson" : "Share & record";
+    importState.tab !== "youtube" ? "Create lesson" : importState.capture ? "Stop & create lesson" : "Record";
   $("youtubeOpen").disabled = !isYoutubeUrl($("youtubeInput").value) || Boolean(importState.capture);
 }
 
 /* YouTube via tab-audio capture ------------------------------------- */
 
-async function startYoutubeCapture() {
+// Runs from the Record click. Notes are found while the song plays, so the
+// lesson is ready as soon as recording ends.
+function startYoutubeCapture() {
   $("importError").hidden = true;
+  const url = $("youtubeInput").value.trim();
+  const capture = { cancelled: false, controller: null, session: null, meta: youtubeTitle(url) };
+  importState.capture = capture;
+  importState.busy = true;
+  updateImportButton();
+
+  let session;
   try {
-    importState.busy = true;
-    importState.capture = await startTabCapture({
-      onTick: (seconds) => {
-        $("tabRecordTimer").textContent = formatDuration(seconds);
-        document.title = `● ${formatDuration(seconds)} Recording – PianoGiri`;
-      },
-      onLevel: (level) => {
-        $("tabLevel").style.width = `${Math.round(level * 100)}%`;
-      },
-      onAutoStop: (reason) => {
-        const text = { ended: "The song ended — making your lesson…", limit: "Reached the 8-minute limit — making your lesson…", unshared: "Sharing stopped — making your lesson…" };
-        $("tabRecordStatus").textContent = text[reason] || "Making your lesson…";
+    session = createLiveConverter({
+      detail: $("detailSelect").value,
+      onLiveSeconds: (seconds) => {
+        if (seconds > 0) $("tabLiveStatus").textContent = `Notes found up to ${formatDuration(seconds)} — the lesson will be ready when the song ends.`;
       },
     });
   } catch (error) {
-    importState.busy = false;
+    return endCapture(capture, error);
+  }
+  capture.session = session;
+
+  // startTabCapture creates its audio context synchronously, inside this click.
+  startTabCapture({
+    onPcm: (chunk) => session.append(chunk),
+    onLevel: (level) => {
+      $("tabLevel").style.width = `${Math.round(level * 100)}%`;
+    },
+    onTick: ({ recorded, silentFor, finishAt, waiting }) => {
+      $("tabRecordTimer").textContent = formatDuration(recorded);
+      document.title = waiting ? "● Waiting for music – PianoGiri" : `● ${formatDuration(recorded)} Recording – PianoGiri`;
+      const quiet = !waiting && silentFor >= 3;
+      $("keepWaitingButton").hidden = !quiet;
+      $("tabRecordStatus").textContent = waiting
+        ? "Waiting for the music… press play on the video."
+        : quiet
+          ? `Silence — if the song is over, your lesson is made in ${Math.max(0, Math.ceil(finishAt - silentFor))} s.`
+          : "Recording… song over? Press “Stop & create lesson” — or we'll stop by ourselves.";
+    },
+  })
+    .then((controller) => {
+      capture.controller = controller;
+      if (capture.cancelled) return controller.stop();
+      $("tabRecorder").hidden = false;
+      $("tabLiveStatus").textContent = "";
+      updateImportButton();
+      return controller.done.then(async ({ wav }) => {
+        if (capture.cancelled) return;
+        $("tabRecordStatus").textContent = "Finishing your lesson…";
+        $("keepWaitingButton").hidden = true;
+        const { notes, shift } = await session.finish();
+        const meta = await capture.meta;
+        endCapture(capture);
+        await saveLesson({
+          origin: "youtube",
+          notes,
+          audioOffset: shift,
+          audioBlob: wav,
+          title: $("importTitleInput").value.trim() || meta?.title || "YouTube song",
+          artist: meta?.artist || "From YouTube",
+        });
+        document.title = "✓ Lesson ready – PianoGiri";
+        setTimeout(() => (document.title = PAGE_TITLE), 6000);
+      });
+    })
+    .catch((error) => endCapture(capture, error));
+}
+
+function endCapture(capture, error) {
+  if (importState.capture === capture) {
     importState.capture = null;
+    importState.busy = false;
+  }
+  if (error) capture.session?.cancel();
+  $("tabRecorder").hidden = true;
+  $("keepWaitingButton").hidden = true;
+  document.title = PAGE_TITLE;
+  if (error && !capture.cancelled && error.message !== "cancelled") {
     $("importError").textContent = error.message;
     $("importError").hidden = false;
-    updateImportButton();
-    return;
   }
-
-  $("tabRecorder").hidden = false;
-  $("tabRecordStatus").textContent = "Recording… press play on the video. We'll stop when it ends.";
   updateImportButton();
-
-  const capture = importState.capture;
-  try {
-    const blob = await capture.done;
-    if (capture.cancelled) return;
-    importState.youtubeBlob = blob;
-  } catch (error) {
-    if (!capture.cancelled) {
-      $("importError").textContent = error.message;
-      $("importError").hidden = false;
-    }
-  } finally {
-    importState.capture = null;
-    importState.busy = false;
-    $("tabRecorder").hidden = true;
-    document.title = PAGE_TITLE;
-    updateImportButton();
-  }
-  if (importState.youtubeBlob && !capture.cancelled) {
-    document.title = "✓ Lesson ready – PianoGiri";
-    setTimeout(() => (document.title = PAGE_TITLE), 6000);
-    runImport();
-  }
 }
 
 function cancelTabCapture() {
   const capture = importState.capture;
   if (!capture) return;
   capture.cancelled = true;
-  capture.stop();
+  capture.controller?.stop();
+  capture.session?.cancel();
+  endCapture(capture);
 }
 
 function titleFromFilename(name) {
@@ -991,23 +1024,16 @@ async function runImport() {
     let origin = importState.tab;
     let audioBlob = null;
     let audioOffset = 0;
-    let youtubeArtist = "";
 
     if (importState.tab === "midi") {
       const result = await midiFileToNotes(importState.midiFile);
       notes = result.notes;
       finalTitle = finalTitle || result.title || titleFromFilename(importState.midiFile.name);
     } else {
-      let blob = importState.tab === "audio" ? importState.file : importState.recordedBlob;
+      const blob = importState.tab === "audio" ? importState.file : importState.recordedBlob;
       $("convertProgress").hidden = false;
       $("convertBar").style.width = "0%";
-      document.querySelector('.stages [data-stage="fetch"]').hidden = importState.tab !== "youtube";
-      if (importState.tab === "youtube") {
-        blob = importState.youtubeBlob;
-        const meta = await youtubeTitle($("youtubeInput").value.trim());
-        finalTitle = finalTitle || meta?.title || "YouTube song";
-        youtubeArtist = meta?.artist || "";
-      }
+      document.querySelector('.stages [data-stage="fetch"]').hidden = true;
       audioBlob = blob;
       const result = await audioToNotes(blob, {
         detail: $("detailSelect").value,
@@ -1022,27 +1048,8 @@ async function runImport() {
       finalTitle = finalTitle || (importState.file ? titleFromFilename(importState.file.name) : "My recording");
     }
 
-    let hasAudio = false;
-    if (audioBlob) {
-      try {
-        await audioStore.put(id, audioBlob);
-        hasAudio = true;
-      } catch (_error) {
-        toast("Couldn't save the song audio", "You can still play the lesson, just without the original music.");
-      }
-    }
-    const artist = origin === "youtube" ? youtubeArtist || "From YouTube" : origin === "record" ? "My recording" : "My song";
-    const analysis = origin === "midi" ? 1 : 2; // 2 = tracked melody (see js/melody.js)
-    const song = songService.addUserSong({ id, title: finalTitle || "My song", artist, origin, notes, hasAudio, audioOffset, analysis });
-    profile.recordConversion().forEach((a) => toast(`Badge unlocked: ${a.title}`, a.text));
     setStage("done");
-    toast("Lesson ready!", `${song.notes.length} notes found in “${song.title}”.`);
-    resetImportInputs();
-    closeImport();
-    app.tab = "user";
-    syncTabs();
-    renderLibrary();
-    openSong(song.id);
+    await saveLesson({ origin, notes, audioOffset, audioBlob, title: finalTitle, artist: origin === "record" ? "My recording" : "My song", id });
   } catch (error) {
     $("importError").textContent = error.message || "Something went wrong.";
     $("importError").hidden = false;
@@ -1052,11 +1059,33 @@ async function runImport() {
   }
 }
 
+// Stores a finished lesson (and its audio, for play-along) and opens it.
+async function saveLesson({ origin, notes, audioOffset = 0, audioBlob = null, title, artist, id = `user-${Date.now().toString(36)}` }) {
+  let hasAudio = false;
+  if (audioBlob) {
+    try {
+      await audioStore.put(id, audioBlob);
+      hasAudio = true;
+    } catch (_error) {
+      toast("Couldn't save the song audio", "You can still play the lesson, just without the original music.");
+    }
+  }
+  const analysis = origin === "midi" ? 1 : 2; // 2 = tracked melody (see js/melody.js)
+  const song = songService.addUserSong({ id, title: title || "My song", artist, origin, notes, hasAudio, audioOffset, analysis });
+  profile.recordConversion().forEach((a) => toast(`Badge unlocked: ${a.title}`, a.text));
+  toast("Lesson ready!", `${song.notes.filter((n) => n.m).length || song.notes.length} melody notes in “${song.title}”.`);
+  resetImportInputs();
+  closeImport();
+  app.tab = "user";
+  syncTabs();
+  renderLibrary();
+  openSong(song.id);
+}
+
 function resetImportInputs() {
   importState.file = null;
   importState.midiFile = null;
   importState.recordedBlob = null;
-  importState.youtubeBlob = null;
   $("youtubeInput").value = "";
   $("audioFile").value = "";
   $("midiFile").value = "";
@@ -1114,8 +1143,17 @@ function bindImport() {
   $("importCancel").addEventListener("click", closeImport);
   $("importConvert").addEventListener("click", () => {
     if (importState.tab !== "youtube") return runImport();
-    if (importState.capture) return importState.capture.stop();
+    if (importState.capture) return importState.capture.controller?.stop();
     return startYoutubeCapture();
+  });
+  $("keepWaitingButton").addEventListener("click", () => importState.capture?.controller?.keepWaiting());
+  // Pasting a link opens the video straight away (the paste counts as a click for pop-up rules).
+  $("youtubeInput").addEventListener("paste", (event) => {
+    const text = (event.clipboardData?.getData("text") || "").trim();
+    if (!isYoutubeUrl(text) || importState.capture) return;
+    window.open(text.startsWith("http") ? text : `https://${text}`, "_blank", "noopener");
+    $("youtubeNotice").hidden = false;
+    $("youtubeNotice").textContent = "Opened in a new tab. Pause it at the start, then come back and press Record.";
   });
   $("youtubeOpen").addEventListener("click", () => {
     const url = $("youtubeInput").value.trim();

@@ -385,18 +385,17 @@
           </label>
           <p class="notice" id="youtubeNotice" hidden></p>
           <ol class="yt-steps" id="youtubeSteps">
-            <li>
-              <button class="btn ghost small" type="button" id="youtubeOpen" disabled>Open the video</button>
-              <span>It opens in a new tab. Let any ad finish, then pause it at the start.</span>
-            </li>
-            <li><strong>Share &amp; record</strong> below, pick the YouTube tab and keep <em>“Also share tab audio”</em> on.</li>
-            <li>Press play on the video. You can come back here; we stop by ourselves when the song ends.</li>
+            <li>Paste the link. The video opens in a new tab; <strong>pause it at the start</strong> (skip any ad first).</li>
+            <li><strong>Record</strong> below, choose that tab and keep <em>“Also share tab audio”</em> on.</li>
+            <li>Play the video. Your lesson is ready the moment the song ends. <button class="link-btn" type="button" id="youtubeOpen" disabled>Open the video again</button></li>
           </ol>
           <div class="tab-recorder" id="tabRecorder" hidden>
             <span class="rec-dot" aria-hidden="true"></span>
             <strong id="tabRecordTimer">0:00</strong>
             <div class="level" aria-hidden="true"><div id="tabLevel"></div></div>
-            <span id="tabRecordStatus">Recording… press play on the video</span>
+            <span id="tabRecordStatus">Waiting for the music… press play on the video</span>
+            <span id="tabLiveStatus" class="live-status"></span>
+            <button class="btn ghost small" type="button" id="keepWaitingButton" hidden>Keep waiting</button>
           </div>
         </div>
 

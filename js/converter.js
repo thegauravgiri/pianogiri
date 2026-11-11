@@ -57,43 +57,69 @@ function cleanNotes(rawNotes, minAmplitude) {
   return { notes: notes.map((n) => ({ ...n, t: n.t - shift })), shift };
 }
 
+const MODEL_URLS = { tfModule: IMPORT.tfModule, basicPitchModule: IMPORT.basicPitchModule, basicPitchModel: IMPORT.basicPitchModel };
+
+// One conversion session with the worker. Audio can be appended in pieces;
+// each model window runs as soon as its audio is complete.
+function openSession({ detail, batch, onStage, onProgress, onLiveSeconds }) {
+  if (typeof Worker === "undefined") throw new Error("Your browser can't convert audio. Try a recent Chrome, Edge, Firefox or Safari.");
+  const preset = DETAIL_PRESETS[detail] || DETAIL_PRESETS.medium;
+  const w = getWorker();
+  let settle = null;
+  const done = new Promise((resolve, reject) => {
+    settle = { resolve, reject };
+  });
+  w.onmessage = (event) => {
+    const msg = event.data;
+    if (msg.type === "stage") onStage?.(msg.stage, msg);
+    else if (msg.type === "progress") {
+      if (msg.percent !== undefined) onProgress?.(msg.percent);
+      else onLiveSeconds?.(msg.seconds);
+    } else if (msg.type === "done") settle.resolve(msg.notes);
+    else if (msg.type === "error") settle.reject(new Error(`Conversion failed: ${msg.message}`));
+  };
+  w.onerror = (event) => {
+    worker = null;
+    settle.reject(new Error(`Conversion failed to start: ${event.message || "worker error"}`));
+  };
+  w.postMessage({ type: "start", urls: MODEL_URLS, options: preset, capacitySeconds: IMPORT.maxAudioSeconds, batch });
+
+  return {
+    append(samples) {
+      w.postMessage({ type: "append", samples }); // copied: an AudioBuffer's data can't be transferred
+    },
+    async finish() {
+      w.postMessage({ type: "finish" });
+      const { notes, shift } = cleanNotes(await done, preset.minAmplitude);
+      if (notes.length === 0) throw new Error("No notes were detected. Try a clearer recording or raise the detail level.");
+      return { notes, shift };
+    },
+    cancel() {
+      settle.reject(new Error("cancelled"));
+      worker?.terminate();
+      worker = null;
+    },
+  };
+}
+
 // Converts an audio file/blob to notes with Basic Pitch in a Web Worker.
-// onStage(stage) receives "decode" | "model" | "listen" | "notes";
-// onProgress(0..1) reports model progress.
+// onStage(stage) receives "decode" | "model" | "listen" | "notes"; onProgress(0..1).
 export async function audioToNotes(blob, { detail = "medium", onStage, onProgress } = {}) {
-  if (typeof Worker === "undefined" || typeof OfflineAudioContext === "undefined") {
+  if (typeof OfflineAudioContext === "undefined") {
     throw new Error("Your browser can't convert audio. Try a recent Chrome, Edge, Firefox or Safari.");
   }
-
   onStage?.("decode");
   const { samples, seconds, trimmed } = await decodeToModelRate(await blob.arrayBuffer());
-  const preset = DETAIL_PRESETS[detail] || DETAIL_PRESETS.medium;
+  const session = openSession({ detail, batch: true, onStage, onProgress });
+  session.append(samples);
+  const result = await session.finish();
+  return { ...result, seconds, trimmed };
+}
 
-  const notes = await new Promise((resolve, reject) => {
-    const w = getWorker();
-    w.onmessage = (event) => {
-      const msg = event.data;
-      if (msg.type === "stage") onStage?.(msg.stage, msg);
-      else if (msg.type === "progress") onProgress?.(msg.percent);
-      else if (msg.type === "done") resolve(msg.notes);
-      else if (msg.type === "error") reject(new Error(`Conversion failed: ${msg.message}`));
-    };
-    w.onerror = (event) => {
-      worker = null;
-      reject(new Error(`Conversion failed to start: ${event.message || "worker error"}`));
-    };
-    w.postMessage({
-      samples,
-      urls: { tfModule: IMPORT.tfModule, basicPitchModule: IMPORT.basicPitchModule, basicPitchModel: IMPORT.basicPitchModel },
-      options: preset,
-    });
-  });
-
-  const { notes: cleaned, shift } = cleanNotes(notes, preset.minAmplitude);
-  if (cleaned.length === 0) {
-    throw new Error("No notes were detected. Try a clearer recording or raise the detail level.");
-  }
-  return { notes: cleaned, shift, seconds, trimmed };
+// Live conversion for audio that's still being recorded (22.05 kHz mono chunks).
+// onLiveSeconds(s) reports how much of the recording has already been analysed.
+export function createLiveConverter({ detail = "medium", onStage, onLiveSeconds } = {}) {
+  return openSession({ detail, batch: false, onStage, onLiveSeconds });
 }
 
 async function loadMidiLibrary() {

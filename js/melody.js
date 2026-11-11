@@ -9,8 +9,18 @@
 // contours: frames × 264 bins (3 bins per semitone, bin 0 = A0 = MIDI 21)
 // onsets:   frames × 88 semitones (index 0 = MIDI 21)
 
-const FPS = 22050 / 256; // Basic Pitch frame rate (~86.13 fps)
+const SAMPLE_RATE = 22050;
+const FFT_HOP = 256;
+const FPS = SAMPLE_RATE / FFT_HOP; // nominal frame rate, only used for short durations
 const BINS_PER_SEMITONE = 3;
+
+// Basic Pitch's own frame→seconds mapping. Its frames aren't exactly 256 samples
+// apart (overlapping windows are trimmed), so a plain frame/FPS drifts ~0.5%:
+// over a second by the end of a 4-minute song. This matches the note builder.
+const ANNOT_N_FRAMES = Math.floor(SAMPLE_RATE / FFT_HOP) * 2;
+const AUDIO_N_SAMPLES = SAMPLE_RATE * 2 - FFT_HOP;
+const WINDOW_OFFSET = (FFT_HOP / SAMPLE_RATE) * (ANNOT_N_FRAMES - AUDIO_N_SAMPLES / FFT_HOP) + 0.0018;
+export const frameToTime = (frame) => (frame * FFT_HOP) / SAMPLE_RATE - WINDOW_OFFSET * Math.floor(frame / ANNOT_N_FRAMES);
 const MIDI_OFFSET = 21;
 
 export const MELODY_DEFAULTS = {
@@ -204,8 +214,8 @@ function segmentNotes(pitch, strength, onsets, o) {
   }
 
   return merged.map((n) => ({
-    t: n.start / FPS,
-    d: (n.end - n.start) / FPS,
+    t: frameToTime(n.start),
+    d: frameToTime(n.end) - frameToTime(n.start),
     midi: n.midi,
     v: Math.round(55 + Math.min(1, n.sum / Math.max(1, n.n)) * 70),
     m: true,

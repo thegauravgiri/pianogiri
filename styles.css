@@ -1705,6 +1705,25 @@ select,
   border: 1px solid rgba(255, 107, 107, 0.45);
 }
 
+.live-status {
+  flex-basis: 100%;
+  color: var(--accent-bright);
+  font-size: 0.8rem;
+}
+
+.link-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent-bright);
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+.link-btn:disabled {
+  display: none;
+}
+
 .tab-recorder strong {
   font-family: var(--font-mono);
 }

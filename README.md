@@ -71,7 +71,7 @@ Everything runs client-side, so the site stays on **GitHub Pages (free)**:
 
 ### YouTube import
 
-YouTube lessons use **tab-audio capture**. The video opens in a new tab, the user shares that tab's audio (`getDisplayMedia`), and the browser records it while it plays, stopping by itself after about 5 seconds of silence. It then converts the recording like any other audio. There's no server, so nothing can be blocked and nothing costs money. It works in desktop Chrome and Edge only; other browsers are told to upload a file instead. The video title comes from YouTube's oEmbed endpoint.
+YouTube lessons use **tab-audio capture**. Pasting a link opens the video in a new tab; the user presses Record, shares that tab's audio (`getDisplayMedia`) and plays the video. An AudioWorklet taps the audio at 22.05 kHz. Silence before the music is skipped, pauses or buffering longer than 2 s are shortened to 2 s, and 8 s of silence ends the recording (or the user presses Stop). The worker runs each Basic Pitch window as soon as its audio arrives (identical to a whole-file run), so the lesson is ready about a second after recording stops. The same gated audio is saved as WAV for play-along, which keeps it sample-aligned with the notes. There's no server, so nothing can be blocked and nothing costs money. Desktop Chrome and Edge only; other browsers are told to upload a file. Titles come from YouTube's oEmbed endpoint.
 
 `youtube-service/` holds a parked Cloud Run downloader (yt-dlp) that was tried first. YouTube blocked about 3 in 4 of its requests from Cloud Run, so the app no longer uses it.
 
