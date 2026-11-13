@@ -84,8 +84,8 @@ export function createRenderer(canvas) {
     ctx.fillRect(0, height - 2, width, 2);
   }
 
-  // A marker falls with the notes and reaches the line when the computer keys
-  // move: a bracket over the keys they move to, with an arrow and the new start note.
+  // A marker falls with the notes and reaches the line when the keyboard
+  // slides to another octave (the letters stay; the notes under them change).
   function drawHandMoves(game, options) {
     const hand = options.hand;
     if (!hand || hand.length < 2) return;
@@ -97,34 +97,24 @@ export function createRenderer(canvas) {
       if (move.t < now - 0.3) continue;
       const y = height - (move.t - now) * pps;
       if (y < -30) break;
-      const left = keyX(move.base);
-      const right = keyX(move.base + 17);
-      if (!left || !right) continue;
-      const x0 = left.x + 2;
-      const x1 = right.x + right.w - 2;
       const up = move.base > from;
+      const octaves = Math.abs(move.base - from) / 12;
       const fade = y > height - 30 ? Math.max(0, (height - y) / 30 + 0.4) : 1;
       ctx.save();
       ctx.globalAlpha = Math.min(1, fade);
       ctx.strokeStyle = "#ffd166";
       ctx.lineWidth = 2;
-      ctx.setLineDash([8, 6]);
+      ctx.setLineDash([10, 7]);
       ctx.beginPath();
-      ctx.moveTo(x0, y);
-      ctx.lineTo(x1, y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.moveTo(x0, y - 8);
-      ctx.lineTo(x0, y);
-      ctx.moveTo(x1, y - 8);
-      ctx.lineTo(x1, y);
-      ctx.stroke();
-      const label = `${up ? "▲" : "▼"} Keys move to ${pitchClassName(move.base)}${Math.floor(move.base / 12) - 1}`;
+      const label = `${up ? "▲" : "▼"} Octave ${up ? "up" : "down"}${octaves > 1 ? ` ×${octaves}` : ""}: keys start at ${pitchClassName(move.base)}${Math.floor(move.base / 12) - 1}`;
       ctx.font = "600 12px 'Space Grotesk', system-ui, sans-serif";
       const tw = ctx.measureText(label).width + 16;
-      const cx = Math.max(x0, Math.min(x1 - tw, (x0 + x1) / 2 - tw / 2));
-      ctx.fillStyle = "rgba(14,22,38,0.88)";
+      const cx = width / 2 - tw / 2;
+      ctx.fillStyle = "rgba(14,22,38,0.9)";
       roundRect(cx, y - 24, tw, 20, 10);
       ctx.fill();
       ctx.fillStyle = "#ffd166";
@@ -143,7 +133,8 @@ export function createRenderer(canvas) {
       if (top > height + 4) continue; // fully below the line
       const bottomRaw = height - (note.t - now) * pps;
       if (bottomRaw < -8) break; // notes are sorted; the rest are above the screen
-      const pos = keyX(note.midi);
+      const lane = options.laneOf ? options.laneOf(note) : note.midi;
+      const pos = keyX(lane);
       if (!pos) continue;
 
       // Hit notes are consumed at the line; only the remaining tail is drawn.
@@ -182,7 +173,7 @@ export function createRenderer(canvas) {
       }
 
       if (options.labelMode !== "off" && h >= 18 && w >= 14) {
-        const label = options.labelMode === "keys" ? options.keyLabels.get(note.midi) || pitchClassName(note.midi) : pitchClassName(note.midi);
+        const label = options.labelMode === "keys" ? options.keyLabels.get(lane) || pitchClassName(note.midi) : pitchClassName(note.midi);
         ctx.fillStyle = note.status === "missed" ? "rgba(255,255,255,0.5)" : "rgba(16,33,45,0.85)";
         ctx.font = `700 ${Math.min(15, Math.max(10, w * 0.42))}px "JetBrains Mono", monospace`;
         ctx.textAlign = "center";
@@ -347,8 +338,8 @@ export function createRenderer(canvas) {
     drawLanes();
     if (game) {
       drawWaitHint(game);
-      drawHandMoves(game, options);
       drawNotes(game, options);
+      drawHandMoves(game, options);
     } else {
       drawFreeBars(nowMs);
     }

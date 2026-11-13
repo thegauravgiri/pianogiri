@@ -1,21 +1,25 @@
-// Turns a transcribed vocal line into the tune people actually hum.
+// Cleans a melody transcribed from singing without changing the tune.
 //
-// Singers decorate: quick turns, slides into a note, little runs on one
-// syllable (very common in Indian and Nepali songs). A faithful transcription
-// keeps all of that, which on a piano sounds like a flurry of random notes. This
-//   1. finds the song's key from all its notes,
-//   2. moves short off-key notes (slides passing between scale notes) onto the scale,
-//   3. folds ornaments (notes shorter than `minSeconds` that run straight into a
-//      neighbour) into the main note they decorate.
-// Longer notes, rests and genuinely separate short notes are left alone.
+// Two artefacts of transcribing a voice are removed:
+//   * glides: when a singer slides from A down to E, the transcription catches
+//     a brief G# and F# on the way. A short note that sits strictly between its
+//     neighbours' pitches and runs straight into both is part of that slide,
+//     so it's folded into the note the slide arrives at;
+//   * split notes: one held note sometimes comes out as two back-to-back
+//     notes of the same pitch; those are joined.
+// Short off-key notes (also mostly slides) are moved onto the song's scale.
+// Quick notes that zigzag (C# B C# A B G# A) are real melody and are kept.
+// Checked against piano tutorials of a trending song: fewer extra notes,
+// with none of the tune lost.
 
 const MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 const MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
 const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
 const MINOR_SCALE = [0, 2, 3, 5, 7, 8, 10, 11]; // natural minor plus the raised 7th
 
-const JOIN_GAP = 0.08; // seconds: notes closer than this count as one sung gesture
-const MAX_ORNAMENT_LEAP = 4; // semitones: further than this is a real melodic jump
+const GLIDE_SECONDS = 0.2; // passing notes shorter than this are part of a slide
+const SPLIT_SECONDS = 0.15; // a same-pitch fragment shorter than this is joined to its twin
+const TOUCH_GAP = 0.06; // notes closer than this run into each other
 const SNAP_MAX_SECONDS = 0.35; // longer off-key notes are probably intended
 
 // Krumhansl–Schmuckler key estimate. Returns { tonic, mode, scale: Set of pitch classes }.
@@ -37,62 +41,48 @@ export function detectKey(notes) {
   return { tonic: best.tonic, mode: best.mode, scale: new Set(steps.map((s) => (s + best.tonic) % 12)) };
 }
 
-const inScale = (scale, midi) => scale.has(((midi % 12) + 12) % 12);
+const pitchClass = (midi) => ((midi % 12) + 12) % 12;
+const end = (n) => n.t + n.d;
 
-// melody: notes of the tune; allNotes: the whole song (for the key).
+// melody: the tune's notes; allNotes: the whole song (for the key).
 // Returns new note objects; each lists the original notes it replaced in `from`.
-export function simplifyMelody(melody, allNotes, { minSeconds = 0.2 } = {}) {
-  if (melody.length < 2) return melody.map((n) => ({ ...n, from: [n] }));
-  const { scale } = detectKey(allNotes.length ? allNotes : melody);
+export function simplifyMelody(melody, allNotes) {
   const notes = [...melody].sort((a, b) => a.t - b.t).map((n) => ({ ...n, from: [n] }));
+  if (notes.length < 2) return notes;
+  const { scale } = detectKey(allNotes.length ? allNotes : melody);
 
-  // 1. Short off-key notes go to the nearest scale note, leaning towards a neighbour's pitch.
+  // Short off-key notes go to the nearest scale note, leaning towards a neighbour's pitch.
   notes.forEach((n, i) => {
-    if (inScale(scale, n.midi) || n.d >= SNAP_MAX_SECONDS) return;
-    const options = [n.midi - 1, n.midi + 1].filter((m) => inScale(scale, m));
+    if (scale.has(pitchClass(n.midi)) || n.d >= SNAP_MAX_SECONDS) return;
+    const options = [n.midi - 1, n.midi + 1].filter((m) => scale.has(pitchClass(m)));
     if (!options.length) return;
-    const neighbours = [notes[i - 1]?.midi, notes[i + 1]?.midi].filter((m) => m !== undefined);
+    const neighbours = [notes[i - 1]?.midi, notes[i + 1]?.midi];
     options.sort((a, b) => Number(neighbours.includes(b)) - Number(neighbours.includes(a)));
     n.midi = options[0];
   });
 
-  // 2. Fold ornaments into the note they lead into or out of, shortest first.
-  const end = (n) => n.t + n.d;
-  for (;;) {
-    let pick = -1;
-    for (let i = 0; i < notes.length; i += 1) {
-      const n = notes[i];
-      if (n.d >= minSeconds) continue;
-      const prev = notes[i - 1];
-      const next = notes[i + 1];
-      const joinsPrev = prev && n.t - end(prev) <= JOIN_GAP && Math.abs(prev.midi - n.midi) <= MAX_ORNAMENT_LEAP;
-      const joinsNext = next && next.t - end(n) <= JOIN_GAP && Math.abs(next.midi - n.midi) <= MAX_ORNAMENT_LEAP;
-      if (!joinsPrev && !joinsNext) continue;
-      if (pick < 0 || n.d < notes[pick].d) pick = i;
+  // Glides: fold passing notes into the note the slide arrives at.
+  for (let i = 1; i < notes.length - 1; ) {
+    const prev = notes[i - 1];
+    const n = notes[i];
+    const next = notes[i + 1];
+    const passing = (prev.midi < n.midi && n.midi < next.midi) || (prev.midi > n.midi && n.midi > next.midi);
+    if (passing && n.d < GLIDE_SECONDS && n.t - end(prev) <= TOUCH_GAP && next.t - end(n) <= TOUCH_GAP) {
+      next.d = end(next) - n.t;
+      next.t = n.t;
+      next.from.push(...n.from);
+      notes.splice(i, 1);
+      if (i > 1) i -= 1; // the new neighbour may now be a passing note too
+    } else {
+      i += 1;
     }
-    if (pick < 0) break;
-    const n = notes[pick];
-    const prev = notes[pick - 1];
-    const next = notes[pick + 1];
-    const joinsPrev = prev && n.t - end(prev) <= JOIN_GAP && Math.abs(prev.midi - n.midi) <= MAX_ORNAMENT_LEAP;
-    const joinsNext = next && next.t - end(n) <= JOIN_GAP && Math.abs(next.midi - n.midi) <= MAX_ORNAMENT_LEAP;
-    // A note leading into a longer one is a grace note: the main note starts with it.
-    // Otherwise it trails off the previous note.
-    const into = joinsNext && (!joinsPrev || next.d >= prev.d) ? next : prev;
-    const start = Math.min(into.t, n.t);
-    const stop = Math.max(end(into), end(n));
-    into.t = start;
-    into.d = stop - start;
-    into.v = Math.max(into.v || 0, n.v || 0);
-    into.from.push(...n.from);
-    notes.splice(pick, 1);
   }
 
-  // 3. Snapping can leave the same pitch twice in a row with no gap: one held note.
+  // Split notes: same pitch, touching, one of them a fragment.
   const out = [];
   for (const n of notes) {
     const prev = out[out.length - 1];
-    if (prev && prev.midi === n.midi && n.t - end(prev) <= 0.02 && (prev.from.length > 1 || n.from.length > 1)) {
+    if (prev && prev.midi === n.midi && n.t - end(prev) <= TOUCH_GAP && Math.min(prev.d, n.d) < SPLIT_SECONDS) {
       prev.d = end(n) - prev.t;
       prev.from.push(...n.from);
       continue;

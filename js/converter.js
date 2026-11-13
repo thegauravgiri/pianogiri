@@ -68,7 +68,7 @@ const MODEL_URLS = {
 
 // One conversion session with the worker. Audio can be appended in pieces;
 // each model window runs as soon as its audio is complete.
-function openSession({ detail, batch, onStage, onProgress, onLiveSeconds }) {
+function openSession({ detail, kind, batch, onStage, onProgress, onLiveSeconds }) {
   if (typeof Worker === "undefined") throw new Error("Your browser can't convert audio. Try a recent Chrome, Edge, Firefox or Safari.");
   const preset = DETAIL_PRESETS[detail] || DETAIL_PRESETS.medium;
   const w = getWorker();
@@ -89,7 +89,7 @@ function openSession({ detail, batch, onStage, onProgress, onLiveSeconds }) {
     worker = null;
     settle.reject(new Error(`Conversion failed to start: ${event.message || "worker error"}`));
   };
-  w.postMessage({ type: "start", urls: MODEL_URLS, options: preset, capacitySeconds: IMPORT.maxAudioSeconds, batch });
+  w.postMessage({ type: "start", urls: MODEL_URLS, options: { ...preset, instrumental: kind === "instrumental" }, capacitySeconds: IMPORT.maxAudioSeconds, batch });
 
   return {
     append(samples) {
@@ -111,13 +111,15 @@ function openSession({ detail, batch, onStage, onProgress, onLiveSeconds }) {
 
 // Converts an audio file/blob to notes with Basic Pitch in a Web Worker.
 // onStage(stage) receives "decode" | "model" | "listen" | "notes"; onProgress(0..1).
-export async function audioToNotes(blob, { detail = "medium", onStage, onProgress } = {}) {
+// kind: "sung" (singing with music: the melody follows the voice) or
+// "instrumental" (piano covers etc.: the melody is the top line).
+export async function audioToNotes(blob, { detail = "medium", kind = "sung", onStage, onProgress } = {}) {
   if (typeof OfflineAudioContext === "undefined") {
     throw new Error("Your browser can't convert audio. Try a recent Chrome, Edge, Firefox or Safari.");
   }
   onStage?.("decode");
   const { samples, seconds, trimmed } = await decodeToModelRate(await blob.arrayBuffer());
-  const session = openSession({ detail, batch: true, onStage, onProgress });
+  const session = openSession({ detail, kind, batch: true, onStage, onProgress });
   session.append(samples);
   const result = await session.finish();
   return { ...result, seconds, trimmed };
@@ -125,8 +127,8 @@ export async function audioToNotes(blob, { detail = "medium", onStage, onProgres
 
 // Live conversion for audio that's still being recorded (22.05 kHz mono chunks).
 // onLiveSeconds(s) reports how much of the recording has already been analysed.
-export function createLiveConverter({ detail = "medium", onStage, onLiveSeconds } = {}) {
-  return openSession({ detail, batch: false, onStage, onLiveSeconds });
+export function createLiveConverter({ detail = "medium", kind = "sung", onStage, onLiveSeconds } = {}) {
+  return openSession({ detail, kind, batch: false, onStage, onLiveSeconds });
 }
 
 async function loadMidiLibrary() {

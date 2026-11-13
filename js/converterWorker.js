@@ -194,9 +194,39 @@ function blend(voice, mix, weight) {
   return out;
 }
 
+// Instrumental recordings: the melody is the top note of each moment. On a
+// piano cover that's exactly what the right hand plays, repeated notes included.
+function topLine(poly) {
+  const tops = [];
+  for (const n of poly) {
+    const last = tops[tops.length - 1];
+    if (last && n.t - last.t <= 0.06) {
+      if (n.midi > last.midi) tops[tops.length - 1] = n;
+    } else {
+      tops.push(n);
+    }
+  }
+  return tops;
+}
+
 function buildNotes(bp, options) {
   const nFrames = Math.floor(job.mix.length * (ANNOTATIONS_FPS / SAMPLE_RATE));
   const [frames, onsets, contours] = job.mix.out.map((rows) => rows.slice(0, nFrames));
+  const polyNotes = () =>
+    bp
+      .noteFramesToTime(
+        bp.addPitchBendsToNoteEvents(
+          contours,
+          bp.outputToNotesPoly(frames, onsets, options.onsetThreshold, options.frameThreshold, options.minNoteFrames, true, 4186, 27.5, true)
+        )
+      )
+      .map((n) => ({ t: n.startTimeSeconds, d: n.durationSeconds, midi: n.pitchMidi, v: Math.round(40 + Math.min(1, n.amplitude) * 87), a: n.amplitude }))
+      .sort((a, b) => a.t - b.t);
+  if (options.instrumental) {
+    const poly = polyNotes().filter((n) => n.a >= options.minAmplitude && n.d >= 0.05);
+    const tops = new Set(topLine(poly));
+    return poly.map((n) => (tops.has(n) ? { ...n, m: true } : n));
+  }
   let melody;
   if (job.voice) {
     const [, vOnsets, vContours] = job.voice.out.map((rows) => rows.slice(0, nFrames));
@@ -205,15 +235,7 @@ function buildNotes(bp, options) {
   } else {
     melody = extractMelody(contours, onsets);
   }
-  const poly = bp
-    .noteFramesToTime(
-      bp.addPitchBendsToNoteEvents(
-        contours,
-        bp.outputToNotesPoly(frames, onsets, options.onsetThreshold, options.frameThreshold, options.minNoteFrames, true, 4186, 27.5, true)
-      )
-    )
-    .map((n) => ({ t: n.startTimeSeconds, d: n.durationSeconds, midi: n.pitchMidi, v: Math.round(40 + Math.min(1, n.amplitude) * 87), a: n.amplitude }))
-    .sort((a, b) => a.t - b.t);
+  const poly = polyNotes();
   return [...melody, ...accompanimentFrom(poly, melody)];
 }
 
@@ -230,7 +252,8 @@ async function handle(msg) {
     };
     const current = job;
     self.postMessage({ type: "stage", stage: "model" });
-    const [{ tf }, sep] = await Promise.all([current.modules, loadSeparator(msg.urls)]);
+    // Piano covers and instrumentals have no voice to separate.
+    const [{ tf }, sep] = await Promise.all([current.modules, msg.options?.instrumental ? null : loadSeparator(msg.urls)]);
     if (job !== current) return;
     if (sep) {
       current.voice = newTrack(capacity);

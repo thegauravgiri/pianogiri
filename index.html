@@ -350,6 +350,18 @@
           <button class="tab" role="tab" type="button" data-import-tab="youtube" aria-selected="false">YouTube <span class="soon">soon</span></button>
         </div>
 
+        <fieldset class="kind-choice" id="kindRow">
+          <legend>What's in the recording?</legend>
+          <label>
+            <input type="radio" name="importKind" value="sung" checked />
+            <span><strong>Singing with music</strong><small>Finds the tune the singer sings</small></span>
+          </label>
+          <label>
+            <input type="radio" name="importKind" value="instrumental" />
+            <span><strong>Piano or instrumental</strong><small>A piano cover or tutorial: plays its top notes exactly</small></span>
+          </label>
+        </fieldset>
+
         <div class="import-panel" data-import-panel="audio">
           <label class="dropzone" id="audioDrop">
             <input type="file" id="audioFile" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.webm" />

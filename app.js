@@ -251,20 +251,35 @@ function refreshKeyLabels() {
   updateReach();
 }
 
-// With computer keys, keys outside the 18 you can reach are dimmed.
 function updateReach() {
-  const following = app.song && settings.layout === "computer" && !TOUCH_ONLY;
-  keyboard.setReach(following ? app.windowBase : null, following ? app.windowBase + COMPUTER_WINDOW_SPAN : null);
+  keyboard.setReach(null, null);
 }
 
-// The computer keys follow the music (see js/handPlan.js).
+function following() {
+  return Boolean(app.song && app.arrangement && settings.layout === "computer");
+}
+
+// With computer keys the letters never move: A is always the first key. When
+// the tune changes octave, the piano slides underneath them (see js/handPlan.js).
 function followHand(songTime) {
-  if (!app.arrangement || settings.layout !== "computer") return;
+  if (!following()) return;
   const base = baseAt(app.arrangement.hand, songTime);
   if (base === app.windowBase) return;
+  const direction = base > app.windowBase ? "up" : "down";
   app.windowBase = base;
-  refreshKeyLabels();
+  buildKeyboard(base, base + COMPUTER_WINDOW_SPAN);
+  const bed = $("keybed");
+  bed.classList.remove("slide-up", "slide-down");
+  void bed.offsetWidth;
+  bed.classList.add(`slide-${direction}`);
   updateControls();
+}
+
+// Where a note is drawn and lit: the key (letter) you press for it. With
+// computer keys that's its pitch moved into the current octave of the keyboard.
+function laneOf(note) {
+  if (!following()) return note.midi;
+  return note.midi - baseAt(app.arrangement.hand, note.t) + app.windowBase;
 }
 
 /* ------------------------------------------------------------------ */
@@ -368,6 +383,7 @@ async function reanalyzeSong() {
     if (!blob) throw new Error("The original audio for this lesson is gone.");
     const result = await audioToNotes(blob, {
       detail: "medium",
+      kind: song.kind,
       onStage: (stage) => {
         button.textContent = { decode: "Reading audio…", model: "Loading AI model…", notes: "Building notes…" }[stage] || button.textContent;
       },
@@ -420,7 +436,6 @@ function prepareArrangement() {
   app.arrangement = arrange(app.song.notes, { difficulty: settings.difficulty, layout: settings.layout, sung: isSung(app.song) });
   app.windowBase = app.arrangement.windowBase;
   buildKeyboard(app.arrangement.rangeLo, app.arrangement.rangeHi);
-  updateReach();
   app.game = createGame({ arrangement: app.arrangement, mode: settings.mode, speed: settings.speed, backingOn: false, callbacks: {} });
   renderer.reset();
 }
@@ -468,7 +483,7 @@ function syncSetupControls() {
   notes.push(`${arrangementPreview.play.length} notes to play${holds ? `, ${holds} to hold` : ""}.`);
   if (settings.layout === "computer") {
     const moves = arrangementPreview.hand.length - 1;
-    if (moves) notes.push(`Your keys move ${moves === 1 ? "once" : `${moves} times`} to follow the tune; a marker drops down the lanes before each move.`);
+    if (moves) notes.push(`The piano slides ${moves === 1 ? "once" : `${moves} times`} to another octave to follow the tune. Your letters stay the same; a marker drops before each slide.`);
   }
   if (settings.layout === "full" && !midiDevices.length) {
     notes.push("Full piano works best with a touch screen or MIDI keyboard. Z / X move your computer keys.");
@@ -487,14 +502,15 @@ function startRun() {
     onJudge: handleJudge,
     onWrong: handleWrong,
     onHoldEnd: (note, complete) => {
-      keyboard.setHolding(note.hitMidi ?? note.midi, false);
-      if (complete) renderer.holdComplete(note.midi);
+      keyboard.setHolding(note.hitMidi ?? laneOf(note), false);
+      if (complete) renderer.holdComplete(laneOf(note));
     },
     onAutoNote: (note) => {
       if (!musicOn()) audio.playNote(note.midi, note.d / settings.speed, note.v ?? 85);
-      keyboard.setPressed(note.midi, true);
-      setTimeout(() => keyboard.setPressed(note.midi, Boolean(app.pressCount.get(note.midi))), Math.max(120, (note.d / settings.speed) * 1000));
-      renderer.autoHit(note.midi);
+      const lane = laneOf(note);
+      keyboard.setPressed(lane, true);
+      setTimeout(() => keyboard.setPressed(lane, Boolean(app.pressCount.get(lane))), Math.max(120, (note.d / settings.speed) * 1000));
+      renderer.autoHit(lane);
     },
     onBackingNote: (note) => audio.playNote(note.midi, note.d / settings.speed, (note.v ?? 80) * 0.6),
     onFinish: finishRun,
@@ -568,20 +584,20 @@ function stopRun() {
 }
 
 function handleJudge(note, judgment, info) {
-  renderer.hit(note.midi, judgment);
+  renderer.hit(laneOf(note), judgment);
   if (judgment === "miss") {
-    keyboard.flash(note.midi, "miss-flash");
+    keyboard.flash(laneOf(note), "miss-flash");
     $("comboStat").classList.remove("bump");
     return;
   }
-  if (note.isHold) keyboard.setHolding(note.hitMidi ?? note.midi, true);
+  if (note.isHold) keyboard.setHolding(note.hitMidi ?? laneOf(note), true);
   const combo = info.combo;
   const el = $("comboStat");
   el.classList.remove("bump");
   void el.offsetWidth;
   el.classList.add("bump");
   if (combo > 0 && combo % 25 === 0) {
-    renderer.holdComplete(note.midi);
+    renderer.holdComplete(laneOf(note));
     flashStage(`${combo} combo!`);
   }
 }
@@ -905,6 +921,7 @@ function setImportTab(tab) {
     p.hidden = p.dataset.importPanel !== tab;
   });
   $("detailRow").hidden = tab === "midi";
+  $("kindRow").hidden = tab === "midi";
   updateImportButton();
 }
 
@@ -1001,7 +1018,7 @@ function showYoutubeRecorder(recording) {
 function startYoutubeCapture() {
   $("importError").hidden = true;
   const url = youtubeUrl();
-  const capture = { cancelled: false, controller: null, session: null, meta: yt.meta ? Promise.resolve(yt.meta) : youtubeTitle(url) };
+  const capture = { cancelled: false, controller: null, session: null, kind: importKind(), meta: yt.meta ? Promise.resolve(yt.meta) : youtubeTitle(url) };
   importState.capture = capture;
   importState.busy = true;
   updateImportButton();
@@ -1010,6 +1027,7 @@ function startYoutubeCapture() {
   try {
     session = createLiveConverter({
       detail: $("detailSelect").value,
+      kind: capture.kind,
       onLiveSeconds: (seconds) => {
         if (seconds > 0) $("tabLiveStatus").textContent = `Notes found up to ${formatDuration(seconds)} — the lesson will be ready when the song ends.`;
       },
@@ -1054,6 +1072,7 @@ function startYoutubeCapture() {
         endCapture(capture);
         await saveLesson({
           origin: "youtube",
+          kind: capture.kind,
           notes,
           audioOffset: shift,
           audioBlob: wav,
@@ -1104,7 +1123,12 @@ function titleFromFilename(name) {
 
 // Lessons made from recordings (not MIDI files) have a transcribed, ornamented tune.
 function isSung(song) {
-  return song.source === "user" && song.origin !== "midi" && song.notes.some((n) => n.m);
+  return song.source === "user" && song.origin !== "midi" && song.kind !== "instrumental" && song.notes.some((n) => n.m);
+}
+
+// "sung" (singing with music) or "instrumental" (piano covers and the like).
+function importKind() {
+  return document.querySelector('input[name="importKind"]:checked')?.value === "instrumental" ? "instrumental" : "sung";
 }
 
 function setStage(stage) {
@@ -1144,6 +1168,7 @@ async function runImport() {
       audioBlob = blob;
       const result = await audioToNotes(blob, {
         detail: $("detailSelect").value,
+        kind: importKind(),
         onStage: (stage) => setStage(stage),
         onProgress: (p) => {
           $("convertBar").style.width = `${Math.round(p * 100)}%`;
@@ -1156,7 +1181,7 @@ async function runImport() {
     }
 
     setStage("done");
-    await saveLesson({ origin, notes, audioOffset, audioBlob, title: finalTitle, artist: origin === "record" ? "My recording" : "My song", id });
+    await saveLesson({ origin, kind: origin === "midi" ? null : importKind(), notes, audioOffset, audioBlob, title: finalTitle, artist: origin === "record" ? "My recording" : "My song", id });
   } catch (error) {
     $("importError").textContent = error.message || "Something went wrong.";
     $("importError").hidden = false;
@@ -1167,7 +1192,7 @@ async function runImport() {
 }
 
 // Stores a finished lesson (and its audio, for play-along) and opens it.
-async function saveLesson({ origin, notes, audioOffset = 0, audioBlob = null, title, artist, id = `user-${Date.now().toString(36)}` }) {
+async function saveLesson({ origin, kind = null, notes, audioOffset = 0, audioBlob = null, title, artist, id = `user-${Date.now().toString(36)}` }) {
   let hasAudio = false;
   if (audioBlob) {
     try {
@@ -1178,7 +1203,7 @@ async function saveLesson({ origin, notes, audioOffset = 0, audioBlob = null, ti
     }
   }
   const analysis = origin === "midi" ? 1 : IMPORT.analysisVersion; // see js/melody.js
-  const song = songService.addUserSong({ id, title: title || "My song", artist, origin, notes, hasAudio, audioOffset, analysis });
+  const song = songService.addUserSong({ id, title: title || "My song", artist, origin, kind, notes, hasAudio, audioOffset, analysis });
   profile.recordConversion().forEach((a) => toast(`Badge unlocked: ${a.title}`, a.text));
   toast("Lesson ready!", `${song.notes.filter((n) => n.m).length || song.notes.length} melody notes in “${song.title}”.`);
   resetImportInputs();
@@ -1484,7 +1509,7 @@ function frame(now) {
     if (game) {
       updateHud();
       const upcoming = settings.mode === "watch" ? [] : game.nextNotes().filter((n) => n.t - game.songTime < 0.8);
-      keyboard.setExpected(upcoming.map((n) => n.midi));
+      keyboard.setExpected(upcoming.map(laneOf));
     } else {
       keyboard.setExpected([]);
     }
@@ -1493,7 +1518,8 @@ function frame(now) {
       options: {
         labelMode: settings.labelMode,
         keyLabels: labelCache(),
-        hand: app.song && settings.layout === "computer" && app.arrangement ? app.arrangement.hand : null,
+        hand: following() ? app.arrangement.hand : null,
+        laneOf: following() ? laneOf : null,
       },
       dt,
       nowMs: now,

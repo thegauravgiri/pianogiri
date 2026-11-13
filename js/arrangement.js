@@ -4,8 +4,11 @@ import { planHands } from "./handPlan.js";
 
 const CLUSTER_SECONDS = 0.06; // notes starting this close together form one chord
 const MIN_GAP_EASY = 0.14; // easy mode drops melody notes faster than this
-// Sung ornaments shorter than this are folded into the main note (see simplify.js).
-const ORNAMENT_SECONDS = { easy: 0.2, medium: 0.15 };
+// What a player can manage alongside the melody.
+const LIMITS = {
+  medium: { maxTogether: 2, minSeconds: 0.3, minGap: 0.8 }, // an occasional bass note
+  hard: { maxTogether: 3, minSeconds: 0.2, minGap: 0.25 }, // bass and a chord note, not every note
+};
 
 // Turns a song's raw notes into what the player actually plays.
 //   difficulty: "easy" (melody only) | "medium" (melody + bass) | "hard" (everything)
@@ -34,10 +37,11 @@ export function arrange(notes, { difficulty, layout, sung = false }) {
     play = planned.play;
     hand = planned.hand;
     if (planned.dropped.length) backing = [...backing, ...planned.dropped].sort((a, b) => a.t - b.t);
+    // The on-screen keyboard is always the 18 computer keys; it slides to
+    // another octave when the hand moves (the app rebuilds it at each move).
     windowBase = hand[0].base;
-    const bases = hand.map((h) => h.base);
-    rangeLo = Math.min(...bases);
-    rangeHi = Math.max(...bases) + COMPUTER_WINDOW_SPAN;
+    rangeLo = windowBase;
+    rangeHi = windowBase + COMPUTER_WINDOW_SPAN;
   } else {
     play = play.map((n) => ({ ...n, originalMidi: n.midi }));
     const pitches = play.map((n) => n.midi);
@@ -64,34 +68,55 @@ export function arrange(notes, { difficulty, layout, sung = false }) {
 
 // Songs with a tracked melody (audio and MIDI imports):
 //   easy   = the melody
-//   medium = melody + a bass line (lowest accompaniment notes, well below the tune)
-//   hard   = melody + the whole accompaniment
-// Easy and Medium play the tune as people hum it (ornaments folded in); Hard
-// plays it exactly as sung. Returns { play, replaced: original notes folded away }.
+//   medium = melody + an occasional bass note (lowest accompaniment, well below the tune)
+//   hard   = melody + a playable share of the accompaniment (at most 3 keys at once)
+// A melody transcribed from singing is cleaned first (slides and split notes,
+// see simplify.js). Returns { play, replaced: original notes the cleaned melody replaces }.
 function pickFromMelody(notes, difficulty, sung) {
   const tracked = notes.filter((n) => n.m);
   const accompaniment = notes.filter((n) => !n.m);
-  if (difficulty === "hard") return { play: [...tracked, ...accompaniment.filter((n) => n.d >= 0.1)], replaced: [] };
 
   let melody = tracked;
   let replaced = [];
   if (sung) {
-    melody = simplifyMelody(tracked, notes, { minSeconds: ORNAMENT_SECONDS[difficulty] ?? ORNAMENT_SECONDS.easy }).map(({ from, ...n }) => n);
+    melody = simplifyMelody(tracked, notes).map(({ from, ...n }) => n);
     replaced = tracked;
   }
   if (difficulty === "easy") return { play: melody, replaced };
 
-  const bass = [];
+  const limit = LIMITS[difficulty] || LIMITS.medium;
+  const extra = [];
+  const lastByMidi = new Map();
   let lastT = -Infinity;
   for (const cluster of clusterNotes(accompaniment)) {
-    const low = cluster.reduce((a, b) => (b.midi < a.midi ? b : a));
-    const tune = melodyAt(melody, low.t);
-    const ceiling = tune ? tune.midi - 7 : 57;
-    if (low.midi > ceiling || low.d < 0.15 || low.t - lastT < 0.3) continue;
-    bass.push(low);
-    lastT = low.t;
+    const t = cluster[0].t;
+    const tune = melodyAt(melody, t);
+    const ceiling = tune ? tune.midi - (difficulty === "hard" ? 3 : 7) : 57;
+    // Lowest notes first: the bass carries the harmony.
+    const candidates = cluster
+      .filter((n) => n.midi <= ceiling && n.d >= limit.minSeconds && t - (lastByMidi.get(n.midi) ?? -Infinity) >= 0.4)
+      .sort((a, b) => a.midi - b.midi);
+    if (!candidates.length || t - lastT < limit.minGap) continue;
+    const room = limit.maxTogether - (melodyStartsAt(melody, t) ? 1 : 0);
+    const chosen = difficulty === "hard" ? spread(candidates, Math.min(room, 2)) : candidates.slice(0, Math.min(room, 1));
+    for (const n of chosen) {
+      extra.push(n);
+      lastByMidi.set(n.midi, t);
+    }
+    if (chosen.length) lastT = t;
   }
-  return { play: [...melody, ...bass], replaced };
+  return { play: [...melody, ...extra], replaced };
+}
+
+// Lowest note plus, if there's room, the highest other one (a fuller sound than two neighbours).
+function spread(sortedLowFirst, count) {
+  if (count <= 0) return [];
+  if (count === 1 || sortedLowFirst.length === 1) return sortedLowFirst.slice(0, 1);
+  return [sortedLowFirst[0], sortedLowFirst[sortedLowFirst.length - 1]];
+}
+
+function melodyStartsAt(melody, t) {
+  return melody.some((n) => Math.abs(n.t - t) <= CLUSTER_SECONDS);
 }
 
 function melodyAt(melody, t) {
