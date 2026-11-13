@@ -1,5 +1,6 @@
 import { COMPUTER_WINDOW_SPAN, MIN_MIDI, MAX_MIDI } from "./config.js";
 import { simplifyMelody } from "./simplify.js";
+import { planHands } from "./handPlan.js";
 
 const CLUSTER_SECONDS = 0.06; // notes starting this close together form one chord
 const MIN_GAP_EASY = 0.14; // easy mode drops melody notes faster than this
@@ -10,7 +11,8 @@ const ORNAMENT_SECONDS = { easy: 0.2, medium: 0.15 };
 //   difficulty: "easy" (melody only) | "medium" (melody + bass) | "hard" (everything)
 //   layout:     "computer" (fold into the 18-key window) | "full" (original pitches)
 //   sung:       the melody was transcribed from a recording, so Easy/Medium simplify it
-// Returns { play, backing, rangeLo, rangeHi, windowBase }.
+// Returns { play, backing, rangeLo, rangeHi, windowBase, hand }. `hand` lists where the
+// computer keys sit over time ([{ t, base }], first t = -Infinity); see handPlan.js.
 export function arrange(notes, { difficulty, layout, sung = false }) {
   const hasMelody = notes.some((n) => n.m);
   const picked = hasMelody ? pickFromMelody(notes, difficulty, sung) : { play: pickTopLine(notes, difficulty), replaced: [] };
@@ -19,19 +21,23 @@ export function arrange(notes, { difficulty, layout, sung = false }) {
   // Everything the player doesn't play can be auto-played as backing, except
   // the sung ornaments folded into the player's notes (they'd clash).
   const playSet = new Set([...play, ...picked.replaced]);
-  const backing = notes.filter((n) => !playSet.has(n));
+  let backing = notes.filter((n) => !playSet.has(n));
 
   let windowBase;
   let rangeLo;
   let rangeHi;
+  let hand;
 
   if (layout === "computer") {
-    windowBase = bestWindowBase(play);
-    const lo = windowBase;
-    const hi = windowBase + COMPUTER_WINDOW_SPAN;
-    play = play.map((n) => ({ ...n, midi: foldInto(n.midi, lo, hi), originalMidi: n.midi }));
-    rangeLo = lo;
-    rangeHi = hi;
+    // The keys follow the music instead of squeezing it into 18 keys.
+    const planned = planHands(play);
+    play = planned.play;
+    hand = planned.hand;
+    if (planned.dropped.length) backing = [...backing, ...planned.dropped].sort((a, b) => a.t - b.t);
+    windowBase = hand[0].base;
+    const bases = hand.map((h) => h.base);
+    rangeLo = Math.min(...bases);
+    rangeHi = Math.max(...bases) + COMPUTER_WINDOW_SPAN;
   } else {
     play = play.map((n) => ({ ...n, originalMidi: n.midi }));
     const pitches = play.map((n) => n.midi);
@@ -45,6 +51,7 @@ export function arrange(notes, { difficulty, layout, sung = false }) {
       else rangeHi += 12;
     }
     windowBase = clampWindow(Math.round(median(pitches) / 12) * 12, rangeLo, rangeHi);
+    hand = [{ t: -Infinity, base: windowBase }];
   }
 
   play = resolveOverlaps(dedupe(play));
@@ -52,7 +59,7 @@ export function arrange(notes, { difficulty, layout, sung = false }) {
     n.id = i;
   });
 
-  return { play, backing, rangeLo, rangeHi, windowBase };
+  return { play, backing, rangeLo, rangeHi, windowBase, hand };
 }
 
 // Songs with a tracked melody (audio and MIDI imports):
@@ -136,27 +143,7 @@ function clusterNotes(notes) {
   return clusters;
 }
 
-function bestWindowBase(notes) {
-  if (!notes.length) return 60;
-  let best = 60;
-  let bestScore = -Infinity;
-  for (let base = 24; base <= 96; base += 12) {
-    const inRange = notes.filter((n) => n.midi >= base && n.midi <= base + COMPUTER_WINDOW_SPAN).length;
-    const score = inRange * 10 - Math.abs(base - 60) / 12;
-    if (score > bestScore) {
-      bestScore = score;
-      best = base;
-    }
-  }
-  return best;
-}
 
-function foldInto(midi, lo, hi) {
-  let m = midi;
-  while (m < lo) m += 12;
-  while (m > hi) m -= 12;
-  return m;
-}
 
 function median(values) {
   if (!values.length) return 60;

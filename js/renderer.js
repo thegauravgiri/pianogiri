@@ -84,6 +84,55 @@ export function createRenderer(canvas) {
     ctx.fillRect(0, height - 2, width, 2);
   }
 
+  // A marker falls with the notes and reaches the line when the computer keys
+  // move: a bracket over the keys they move to, with an arrow and the new start note.
+  function drawHandMoves(game, options) {
+    const hand = options.hand;
+    if (!hand || hand.length < 2) return;
+    const now = game.songTime;
+    const pps = height / GAME.lookaheadSeconds;
+    for (let i = 1; i < hand.length; i += 1) {
+      const move = hand[i];
+      const from = hand[i - 1].base;
+      if (move.t < now - 0.3) continue;
+      const y = height - (move.t - now) * pps;
+      if (y < -30) break;
+      const left = keyX(move.base);
+      const right = keyX(move.base + 17);
+      if (!left || !right) continue;
+      const x0 = left.x + 2;
+      const x1 = right.x + right.w - 2;
+      const up = move.base > from;
+      const fade = y > height - 30 ? Math.max(0, (height - y) / 30 + 0.4) : 1;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, fade);
+      ctx.strokeStyle = "#ffd166";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(x0, y - 8);
+      ctx.lineTo(x0, y);
+      ctx.moveTo(x1, y - 8);
+      ctx.lineTo(x1, y);
+      ctx.stroke();
+      const label = `${up ? "▲" : "▼"} Keys move to ${pitchClassName(move.base)}${Math.floor(move.base / 12) - 1}`;
+      ctx.font = "600 12px 'Space Grotesk', system-ui, sans-serif";
+      const tw = ctx.measureText(label).width + 16;
+      const cx = Math.max(x0, Math.min(x1 - tw, (x0 + x1) / 2 - tw / 2));
+      ctx.fillStyle = "rgba(14,22,38,0.88)";
+      roundRect(cx, y - 24, tw, 20, 10);
+      ctx.fill();
+      ctx.fillStyle = "#ffd166";
+      ctx.fillText(label, cx + 8, y - 10);
+      ctx.restore();
+    }
+  }
+
   function drawNotes(game, options) {
     const now = game.songTime;
     const pps = height / GAME.lookaheadSeconds;
@@ -298,6 +347,7 @@ export function createRenderer(canvas) {
     drawLanes();
     if (game) {
       drawWaitHint(game);
+      drawHandMoves(game, options);
       drawNotes(game, options);
     } else {
       drawFreeBars(nowMs);

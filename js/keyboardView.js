@@ -97,6 +97,11 @@ export function createKeyboardView({ keybed, onPressStart, onPressEnd }) {
     }
   }
 
+  // Dim keys outside [lo, hi] (null = no dimming).
+  function setReach(lo, hi) {
+    for (const [midi, el] of keyElements) el.classList.toggle("out-of-reach", lo !== null && (midi < lo || midi > hi));
+  }
+
   function setPressed(midi, pressed) {
     const el = keyElements.get(midi);
     if (el) el.classList.toggle("active", pressed);
@@ -129,6 +134,7 @@ export function createKeyboardView({ keybed, onPressStart, onPressEnd }) {
   return {
     build,
     setLabels,
+    setReach,
     setPressed,
     flash,
     setExpected,

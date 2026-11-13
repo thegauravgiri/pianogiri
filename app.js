@@ -2,6 +2,7 @@ import { WHITE_KEYS, BLACK_KEYS, KEY_CONFIG_BY_CODE, SONG_MANIFEST_PATH, DEFAULT
 import { clamp, isTypingTarget, midiToName, pitchClassName, formatDuration, storage, escapeHtml, prefersReducedMotion } from "./js/utils.js";
 import { createSongService } from "./js/songService.js";
 import { arrange } from "./js/arrangement.js";
+import { baseAt } from "./js/handPlan.js";
 import { createGame } from "./js/gameEngine.js";
 import { createKeyboardView } from "./js/keyboardView.js";
 import { createRenderer } from "./js/renderer.js";
@@ -247,6 +248,23 @@ function buildKeyboard(lo, hi) {
 
 function refreshKeyLabels() {
   keyboard.setLabels(computerLabels());
+  updateReach();
+}
+
+// With computer keys, keys outside the 18 you can reach are dimmed.
+function updateReach() {
+  const following = app.song && settings.layout === "computer" && !TOUCH_ONLY;
+  keyboard.setReach(following ? app.windowBase : null, following ? app.windowBase + COMPUTER_WINDOW_SPAN : null);
+}
+
+// The computer keys follow the music (see js/handPlan.js).
+function followHand(songTime) {
+  if (!app.arrangement || settings.layout !== "computer") return;
+  const base = baseAt(app.arrangement.hand, songTime);
+  if (base === app.windowBase) return;
+  app.windowBase = base;
+  refreshKeyLabels();
+  updateControls();
 }
 
 /* ------------------------------------------------------------------ */
@@ -402,6 +420,7 @@ function prepareArrangement() {
   app.arrangement = arrange(app.song.notes, { difficulty: settings.difficulty, layout: settings.layout, sung: isSung(app.song) });
   app.windowBase = app.arrangement.windowBase;
   buildKeyboard(app.arrangement.rangeLo, app.arrangement.rangeHi);
+  updateReach();
   app.game = createGame({ arrangement: app.arrangement, mode: settings.mode, speed: settings.speed, backingOn: false, callbacks: {} });
   renderer.reset();
 }
@@ -447,8 +466,9 @@ function syncSetupControls() {
   const holds = arrangementPreview.play.filter((n) => n.d >= GAME.holdThreshold).length;
   const notes = [];
   notes.push(`${arrangementPreview.play.length} notes to play${holds ? `, ${holds} to hold` : ""}.`);
-  if (settings.layout === "computer" && arrangementPreview.play.some((n) => n.midi !== n.originalMidi)) {
-    notes.push("Some notes were moved by an octave to fit your computer keys.");
+  if (settings.layout === "computer") {
+    const moves = arrangementPreview.hand.length - 1;
+    if (moves) notes.push(`Your keys move ${moves === 1 ? "once" : `${moves} times`} to follow the tune; a marker drops down the lanes before each move.`);
   }
   if (settings.layout === "full" && !midiDevices.length) {
     notes.push("Full piano works best with a touch screen or MIDI keyboard. Z / X move your computer keys.");
@@ -1459,6 +1479,7 @@ function frame(now) {
   if (app.view === "play") {
     const game = app.game;
     if (game && app.phase === "playing") game.update(now);
+    if (game) followHand(game.songTime);
     music.sync(game ? game.songTime : 0, settings.speed, Boolean(game) && app.phase === "playing" && !game.waiting && musicOn());
     if (game) {
       updateHud();
@@ -1469,7 +1490,11 @@ function frame(now) {
     }
     renderer.frame({
       game: app.song ? game : null,
-      options: { labelMode: settings.labelMode, keyLabels: labelCache() },
+      options: {
+        labelMode: settings.labelMode,
+        keyLabels: labelCache(),
+        hand: app.song && settings.layout === "computer" && app.arrangement ? app.arrangement.hand : null,
+      },
       dt,
       nowMs: now,
     });
