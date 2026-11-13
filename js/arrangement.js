@@ -1,17 +1,24 @@
 import { COMPUTER_WINDOW_SPAN, MIN_MIDI, MAX_MIDI } from "./config.js";
+import { simplifyMelody } from "./simplify.js";
 
 const CLUSTER_SECONDS = 0.06; // notes starting this close together form one chord
 const MIN_GAP_EASY = 0.14; // easy mode drops melody notes faster than this
+// Sung ornaments shorter than this are folded into the main note (see simplify.js).
+const ORNAMENT_SECONDS = { easy: 0.2, medium: 0.15 };
 
 // Turns a song's raw notes into what the player actually plays.
 //   difficulty: "easy" (melody only) | "medium" (melody + bass) | "hard" (everything)
 //   layout:     "computer" (fold into the 18-key window) | "full" (original pitches)
+//   sung:       the melody was transcribed from a recording, so Easy/Medium simplify it
 // Returns { play, backing, rangeLo, rangeHi, windowBase }.
-export function arrange(notes, { difficulty, layout }) {
+export function arrange(notes, { difficulty, layout, sung = false }) {
   const hasMelody = notes.some((n) => n.m);
-  let play = hasMelody ? pickFromMelody(notes, difficulty) : pickTopLine(notes, difficulty);
+  const picked = hasMelody ? pickFromMelody(notes, difficulty, sung) : { play: pickTopLine(notes, difficulty), replaced: [] };
+  let play = picked.play;
 
-  const playSet = new Set(play);
+  // Everything the player doesn't play can be auto-played as backing, except
+  // the sung ornaments folded into the player's notes (they'd clash).
+  const playSet = new Set([...play, ...picked.replaced]);
   const backing = notes.filter((n) => !playSet.has(n));
 
   let windowBase;
@@ -52,11 +59,20 @@ export function arrange(notes, { difficulty, layout }) {
 //   easy   = the melody
 //   medium = melody + a bass line (lowest accompaniment notes, well below the tune)
 //   hard   = melody + the whole accompaniment
-function pickFromMelody(notes, difficulty) {
-  const melody = notes.filter((n) => n.m);
+// Easy and Medium play the tune as people hum it (ornaments folded in); Hard
+// plays it exactly as sung. Returns { play, replaced: original notes folded away }.
+function pickFromMelody(notes, difficulty, sung) {
+  const tracked = notes.filter((n) => n.m);
   const accompaniment = notes.filter((n) => !n.m);
-  if (difficulty === "easy") return melody;
-  if (difficulty === "hard") return [...melody, ...accompaniment.filter((n) => n.d >= 0.1)];
+  if (difficulty === "hard") return { play: [...tracked, ...accompaniment.filter((n) => n.d >= 0.1)], replaced: [] };
+
+  let melody = tracked;
+  let replaced = [];
+  if (sung) {
+    melody = simplifyMelody(tracked, notes, { minSeconds: ORNAMENT_SECONDS[difficulty] ?? ORNAMENT_SECONDS.easy }).map(({ from, ...n }) => n);
+    replaced = tracked;
+  }
+  if (difficulty === "easy") return { play: melody, replaced };
 
   const bass = [];
   let lastT = -Infinity;
@@ -68,7 +84,7 @@ function pickFromMelody(notes, difficulty) {
     bass.push(low);
     lastT = low.t;
   }
-  return [...melody, ...bass];
+  return { play: [...melody, ...bass], replaced };
 }
 
 function melodyAt(melody, t) {

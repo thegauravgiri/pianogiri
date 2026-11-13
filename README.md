@@ -12,7 +12,7 @@ A free, browser-based falling-notes piano game. Notes rain down onto the keys: t
   - _Practice_ waits at every note until you play it. Nothing can be missed.
   - _Perform_ keeps the beat. Each note is judged Perfect / Great / Good / Miss.
   - _Watch_ plays the song for you first.
-- **Difficulty**: Easy (melody only), Medium (melody + bass), Hard (every note). Notes left out can be auto-played as backing.
+- **Difficulty**: Easy (melody only), Medium (melody + bass), Hard (every note). Notes left out can be auto-played as backing. For lessons made from recordings, Easy and Medium play the tune as people hum it: the song's key is detected, short off-key slides are moved onto the scale, and quick sung ornaments are folded into the main note (`js/simplify.js`). Hard keeps every note as sung.
 - **Keyboard layouts**: _Computer keys_ fits any song into the 18-key computer layout, moving out-of-range notes by an octave. _Full piano_ keeps the original pitches (for touch screens and MIDI keyboards).
 - **Speed** 50–150%, tile labels (computer keys / note names), 3-2-1 countdown, auto-pause when the tab loses focus.
 - **Game loop**: score, combo with ×2–×4 multiplier, live accuracy, stars, S–D grades, personal bests, XP and levels, daily streak, 5-minute daily goal, 10 badges, and "next challenge" suggestions.

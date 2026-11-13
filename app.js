@@ -399,7 +399,7 @@ function toggleMusic() {
 /* ------------------------------------------------------------------ */
 
 function prepareArrangement() {
-  app.arrangement = arrange(app.song.notes, { difficulty: settings.difficulty, layout: settings.layout });
+  app.arrangement = arrange(app.song.notes, { difficulty: settings.difficulty, layout: settings.layout, sung: isSung(app.song) });
   app.windowBase = app.arrangement.windowBase;
   buildKeyboard(app.arrangement.rangeLo, app.arrangement.rangeHi);
   app.game = createGame({ arrangement: app.arrangement, mode: settings.mode, speed: settings.speed, backingOn: false, callbacks: {} });
@@ -443,7 +443,7 @@ function syncSetupControls() {
   $("backingToggleRow").hidden = song.hasAudio && settings.music;
   $("labelSelect").value = settings.labelMode;
 
-  const arrangementPreview = arrange(song.notes, { difficulty: settings.difficulty, layout: settings.layout });
+  const arrangementPreview = arrange(song.notes, { difficulty: settings.difficulty, layout: settings.layout, sung: isSung(song) });
   const holds = arrangementPreview.play.filter((n) => n.d >= GAME.holdThreshold).length;
   const notes = [];
   notes.push(`${arrangementPreview.play.length} notes to play${holds ? `, ${holds} to hold` : ""}.`);
@@ -1080,6 +1080,11 @@ function cancelTabCapture() {
 
 function titleFromFilename(name) {
   return name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+// Lessons made from recordings (not MIDI files) have a transcribed, ornamented tune.
+function isSung(song) {
+  return song.source === "user" && song.origin !== "midi" && song.notes.some((n) => n.m);
 }
 
 function setStage(stage) {
