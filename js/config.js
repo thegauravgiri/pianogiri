@@ -68,7 +68,7 @@ export const ADS = {
 // Song import
 export const IMPORT = {
   // Bump when the melody finder improves: older lessons with saved audio offer a re-analyze.
-  analysisVersion: 4,
+  analysisVersion: 5,
   maxAudioSeconds: 8 * 60,
   basicPitchModule: "https://cdn.jsdelivr.net/npm/@spotify/basic-pitch@1.0.1/+esm",
   basicPitchModel: "https://cdn.jsdelivr.net/npm/@spotify/basic-pitch@1.0.1/model/model.json",

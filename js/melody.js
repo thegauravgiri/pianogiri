@@ -47,7 +47,19 @@ export const MELODY_DEFAULTS = {
 // Settings for evidence that mostly comes from the separated voice (see
 // converterWorker.js): the voice is cleaner, so the line may move more freely and
 // start and stop more readily, while a firmer register prior keeps it on the singer.
-export const MELODY_HYBRID = { voicingCost: 0.6, priorWeight: 1.2, moveCost: 0.06, changeCost: 0.1 };
+// Repeated syllables on one pitch ("A A A") are split on a clear new attack:
+// tuned against piano tutorials of a trending song, this keeps every note of the
+// tune and cuts the extra ones by two thirds (long merged notes made the
+// melody feel like a few held notes).
+export const MELODY_HYBRID = {
+  voicingCost: 0.6,
+  priorWeight: 1.2,
+  moveCost: 0.06,
+  changeCost: 0.1,
+  reattackOnset: 0.3,
+  reattackDip: 0.75, // a looser value splits steady synth or organ notes on their natural fade
+  minReattackSeconds: 0.16,
+};
 
 export function extractMelody(contours, onsets, options = {}) {
   const o = { ...MELODY_DEFAULTS, ...options };
